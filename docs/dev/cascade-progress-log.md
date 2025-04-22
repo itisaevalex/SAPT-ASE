@@ -225,3 +225,11 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Modified `AdaptiveWorkflow.run_adaptive` to correctly handle the refactored backend's behavior.
     - Adjusted test expectations in `test_check_convergence` to align with the corrected logic for handling missing components and target accuracy keys after refactoring.
 - **Outcome:** All tests in `tests/test_adaptive.py` and the full project test suite are now passing after the backend refactoring.
+
+### April 22, 2025: Debugged and fixed `test_orchestrator_recover_basis_incompatible`.
+    - Added `basis_set`, `method`, and other runtime attributes to `SaptResult` dataclass (`saptase/core/models.py`).
+    - Updated `MockFailureBackend` to populate these new attributes in the returned `SaptResult` upon success (`tests/test_orchestrator.py`).
+    - Modified orchestrator (`saptase/core/orchestrator.py`):
+        - Ensured `run_local_parallel` uses `basis_set`/`method` from the `result` object for logging successful tasks.
+        - Explicitly set `basis_set`/`method` on the intermediate `fail_result` object within `_execute_task_for_parallel` before logging intermediate failures to the database.
+    - Verified test passes, confirming correct data propagation and provenance logging for basis incompatibility recovery.

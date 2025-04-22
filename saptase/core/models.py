@@ -147,6 +147,13 @@ class SaptResult:
         success: Whether the calculation completed successfully
         error_message: Error message if the calculation failed
         raw_output: Raw output from the backend calculation
+        basis_set: The basis set used for this specific calculation attempt.
+        method: The method used for this specific calculation attempt.
+        # Attributes added during runtime/orchestration:
+        elapsed_time: Time taken for the specific attempt (seconds).
+        attempt_number: The 0-based index of the attempt that generated this result.
+        error_code: Specific error code (e.g., 'BasisIncompatible') if success is False.
+        error_details: Additional details about the error or recovery history (e.g., JSON string).
     """
 
     task_id: str
@@ -154,6 +161,13 @@ class SaptResult:
     success: bool = True
     error_message: Optional[str] = None
     raw_output: Optional[str] = None
+    basis_set: Optional[str] = None
+    method: Optional[str] = None
+    # Runtime populated fields (consider adding defaults if needed)
+    elapsed_time: Optional[float] = None
+    attempt_number: Optional[int] = None
+    error_code: Optional[str] = None
+    error_details: Optional[str] = None
 
     @property
     def total_energy(self) -> float:
