@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 from copy import deepcopy
 
-from saptase.core.backend import SaptBackend, Psi4Backend # Import Psi4Backend
+from saptase.core.backend import get_backend # Import the factory
 from saptase.core.basis import BASIS_LADDER, get_basis_rung, get_next_basis
 from saptase.core.models import SaptResult, SaptTask, TaskStatus
 from saptase.core.orchestrator import SaptWorkflow
@@ -48,32 +48,20 @@ class AdaptiveWorkflow(SaptWorkflow):
                               Expected keys: 'target_accuracy' (dict), 'max_rung' (int).
         """
         backend_options = backend_options or {}
+        adaptive_options = adaptive_options or {}
 
         # 1. Instantiate the backend based on name
-        if backend_name.lower() == "psi4":
-            # Extract relevant options for Psi4Backend, e.g., memory
-            psi4_memory = backend_options.get("memory", "2GB") # Default memory
-            backend_instance = Psi4Backend(memory=psi4_memory)
-        elif backend_name.lower() == "mock": # Allow mock for testing
-            # Assumes a MockBackend class exists, maybe in tests or core.backend?
-            # For now, let's defer this - how did the tests mock it before?
-            # The tests create their own MockAdaptiveBackend. Orchestrator has MockBackend.
-            # Let's use the Orchestrator's MockBackend if available, else error.
-            try:
-                from saptase.core.orchestrator import MockBackend # Local import
-                backend_instance = MockBackend()
-            except ImportError:
-                 raise ValueError(f"Backend 'mock' requires MockBackend to be defined.")
-
-        else:
-            # TODO: Add CamCASP, SAPT2020 when implemented
-            raise ValueError(f"Unsupported backend: {backend_name}")
+        try:
+            backend_instance = get_backend(backend_name, options=backend_options)
+        except ValueError as e:
+            logger.error(f"Failed to initialize backend '{backend_name}': {e}")
+            raise # Re-raise the error to halt execution
 
         # 2. Initialize the base class correctly using keyword arguments
         super().__init__(tasks=tasks, backend=backend_instance)
 
         # --- Now initialize AdaptiveWorkflow specific attributes ---
-        self.adaptive_options = adaptive_options or {}
+        self.adaptive_options = adaptive_options
         self.target_accuracy = self.adaptive_options.get("target_accuracy", {})
         # Default max_rung is the top of the ladder
         self.max_rung = self.adaptive_options.get(
@@ -92,6 +80,19 @@ class AdaptiveWorkflow(SaptWorkflow):
         self.primary_task_id = self.tasks[0].id if self.tasks else None # This should work now
         self.primary_task_ref = self.tasks[0] if self.tasks else None # Keep reference
 
+        # Determine starting rung based on the primary task's basis
+        self.start_rung = get_basis_rung(self.primary_task_ref.basis_set)
+        if self.start_rung is None:
+            raise ValueError(
+                f"Initial basis set '{self.primary_task_ref.basis_set}' for task "
+                f"'{self.primary_task_id}' not found in BASIS_LADDER: {BASIS_LADDER}"
+            )
+
+        logger.info(f"Adaptive workflow initialized for task {self.primary_task_id}")
+        logger.info(f"  Starting rung: {self.start_rung} ({BASIS_LADDER[self.start_rung]})")
+        logger.info(f"  Maximum rung: {self.max_rung} ({BASIS_LADDER[self.max_rung]})")
+        if self.target_accuracy:
+            logger.info("  Target Accuracy (kcal/mol):")
 
     def run_adaptive(self, max_workers: Optional[int] = None) -> Dict[str, SaptResult]:
         """
@@ -117,62 +118,58 @@ class AdaptiveWorkflow(SaptWorkflow):
         self.results.clear() # Clear the main results dict from base class
         self.results_by_rung.clear()
 
-        # Use the reference task to get the starting basis
-        current_basis = self.primary_task_ref.basis_set
-        current_rung = get_basis_rung(current_basis)
+        # --- Main Adaptive Loop ---
+        current_rung = self.start_rung
+        prev_result = None
+        final_converged_result = None
+        # Store results by rung index for internal tracking
+        self.results_by_rung: Dict[int, SaptResult] = {}
 
-        if current_rung is None:
-            logger.warning(
-                f"Initial basis '{current_basis}' not found in BASIS_LADDER. Starting from rung 0."
-            )
-            current_rung = 0
-            current_basis = BASIS_LADDER[current_rung]
-
-        logger.info(f"Starting adaptive workflow at rung {current_rung} ({current_basis})...")
-        logger.info(f"Target Accuracy: {self.target_accuracy}")
-        logger.info(f"Max Rung: {self.max_rung} ({BASIS_LADDER[self.max_rung]}) ")
-
-        prev_result: Optional[SaptResult] = None
-        final_converged_result: Optional[SaptResult] = None
+        # Use a copy of the primary task to avoid modifying it
+        current_task = deepcopy(self.primary_task_ref) # Use deepcopy
 
         while current_rung <= self.max_rung:
-            logger.info(f"--- Running Rung {current_rung} ({current_basis}) ---")
-            task_for_rung = deepcopy(self.primary_task_ref) # Use deepcopy
-            task_for_rung.basis_set = current_basis
-            # Use a unique ID for the specific rung calculation for internal tracking
-            rung_task_id = f"{self.primary_task_id}_rung{current_rung}"
-            task_for_rung.id = rung_task_id
-            task_for_rung.status = TaskStatus.PENDING # Ensure status is reset
+            current_basis = BASIS_LADDER[current_rung]
+            # Update task for the current rung
+            current_task.basis_set = current_basis
+            # Generate unique task ID for this rung
+            current_task.id = f"{self.primary_task_id}_rung{current_rung}"
+            logger.info(f"--- Running Rung {current_rung} ({current_basis}) --- Task ID: {current_task.id}")
 
-            # Execute the calculation for the current rung
+            # Execute calculation for the current rung
+            # Use self.backend.calculate which handles single task execution
             current_result = None
             try:
                 # Check if using the mock backend for testing
                 # This avoids pickling issues with mock lambdas when using run_local_serial
                 if self.backend.__class__.__name__ == 'MockAdaptiveBackend':
-                    current_result = self.backend.calculate(task_for_rung)
+                    current_result = self.backend.calculate(current_task)
                     # Manually update the main results dict for consistency if needed later
-                    self.results[rung_task_id] = current_result
+                    self.results[current_task.id] = current_result
                 else:
+                    # Temporarily set the workflow's task list to only the current task
+                    original_tasks = self.tasks
+                    self.tasks = [current_task]
                     # Use the base class method for real backends
-                    self.run_local_serial([task_for_rung])
-                    current_result = self.results.get(rung_task_id)
-
+                    self.run_local_serial() # Run with the single task set above
+                    current_result = self.results.get(current_task.id)
+                    # Restore original task list for the workflow instance
+                    self.tasks = original_tasks
             except Exception as e:
                 logger.error(f"Exception during rung {current_rung} execution: {e}", exc_info=True)
                 # Create a failure result
                 current_result = SaptResult(
-                    task_id=rung_task_id,
+                    task_id=current_task.id,
                     success=False,
                     error_message=f"Execution failed: {e}"
                 )
-                self.results[rung_task_id] = current_result # Ensure failure is recorded
+                self.results[current_task.id] = current_result # Ensure failure is recorded
 
             if not current_result:
                  # This case should ideally not happen if execution completes
-                 logger.error(f"Result for task {rung_task_id} not found after execution.")
-                 current_result = SaptResult(task_id=rung_task_id, success=False, error_message="Result missing after execution")
-                 self.results[rung_task_id] = current_result
+                 logger.error(f"Result for task {current_task.id} not found after execution.")
+                 current_result = SaptResult(task_id=current_task.id, success=False, error_message="Result missing after execution")
+                 self.results[current_task.id] = current_result
 
             # Store result by rung index as well for convergence check
             self.results_by_rung[current_rung] = current_result
@@ -205,25 +202,20 @@ class AdaptiveWorkflow(SaptWorkflow):
                 else:
                      logger.info(f"Not converged after rung {current_rung}.")
 
-            # Prepare for the next rung
-            if current_rung == self.max_rung:
-                logger.warning(
-                    f"Reached maximum rung ({self.max_rung}) without convergence."
-                )
-                # Loop will terminate naturally
-                break
-
             # Get next basis
+            # Use the helper function now
             next_basis = get_next_basis(current_basis)
-            if next_basis is None: # Should not happen if max_rung is respected
-                 logger.error(f"Could not get next basis after {current_basis}. Stopping.")
-                 break # Exit loop
+            if next_basis is None:
+                # This case should ideally be caught by the while current_rung <= self.max_rung check,
+                # but double-check to prevent errors if BASIS_LADDER is somehow modified.
+                 logger.warning(f"Reached end of BASIS_LADDER after {current_basis}. Stopping.")
+                 break
 
-            # Update for next iteration
-            prev_result = current_result
-            current_basis = next_basis
+            # Update for the next iteration
             current_rung += 1
-        # --- End of while loop ---
+            prev_result = current_result # Store for next comparison
+
+        # --- End of Loop ---
 
         # Prepare final return dictionary
         if final_converged_result:

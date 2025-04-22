@@ -1,0 +1,51 @@
+# ADR-0003: Adaptive Basis Set Escalation
+
+Date: 2025-04-22
+
+Status: Accepted
+
+## Context
+
+Calculating SAPT energies can be computationally expensive, especially with large basis sets. Often, a smaller basis set might provide sufficient accuracy for certain components or systems. A mechanism is needed to automatically determine an appropriate basis set level based on user-defined convergence criteria, avoiding unnecessarily expensive calculations while ensuring desired accuracy.
+
+We need a workflow that starts with a computationally cheaper basis set and progressively increases the basis set size (moves up a predefined "ladder") until the change in specific SAPT energy components between consecutive rungs falls below user-specified tolerances.
+
+## Decision
+
+We will implement an `AdaptiveWorkflow` class that orchestrates this basis set escalation process.
+
+1.  **Basis Ladder:** A predefined sequence of basis sets will be used, ordered from generally cheaper/smaller to more expensive/larger. The default ladder will be `["jun-cc-pVDZ", "aug-cc-pVDZ", "jun-cc-pVTZ", "aug-cc-pVTZ"]`, stored in `saptase.core.basis.BASIS_LADDER`.
+2.  **Workflow Input:** Users will provide standard `SaptTask` objects. The initial basis set specified in the task will determine the starting rung on the ladder. Users will also provide `adaptive` options in the job configuration, including:
+    *   `target_accuracy`: A dictionary mapping simplified SAPT energy component keys (e.g., `elst`, `exch`, `ind`, `disp`, `sapt_total`) to convergence tolerance values (in kcal/mol).
+    *   `max_rung`: An integer specifying the maximum index (0-based) in the `BASIS_LADDER` to attempt. This prevents uncontrolled escalation.
+3.  **Workflow Logic (`AdaptiveWorkflow.run_adaptive`):**
+    *   Determine the starting rung based on the input task's basis set.
+    *   Run the calculation for the current rung.
+    *   If not the first rung, compare the absolute difference between energy components from the current and previous rung against the `target_accuracy` map.
+    *   Convergence is achieved if all components specified in `target_accuracy` have converged (delta <= tolerance) OR if the component is missing in the results (treated as converged for that specific key, but requires user caution).
+    *   If converged, stop and return the result from the current rung, keyed by the original task ID.
+    *   If not converged and the current rung is less than `max_rung`, proceed to the next rung in the `BASIS_LADDER`.
+    *   If `max_rung` is reached without convergence, stop and return all results calculated, keyed by their rung-specific task IDs.
+    *   Handle calculation failures at any rung gracefully, potentially stopping or allowing a recovery mechanism (Phase 4) to intervene.
+4.  **Configuration:** Job configuration (e.g., `job_adaptive.yml`) will include an `adaptive` section to specify `target_accuracy` and `max_rung`.
+5.  **Convenience Function:** A helper function (`saptase.workflows.adaptive.run_adaptive_workflow`) will provide an easy entry point.
+
+## Consequences
+
+*   **Pros:**
+    *   Automates the process of finding a suitable basis set level.
+    *   Can significantly reduce computational cost by avoiding unnecessarily large basis set calculations.
+    *   Provides flexibility for users to define convergence criteria based on their specific needs.
+*   **Cons:**
+    *   Requires running calculations for multiple basis sets sequentially, which might take longer wall-clock time than running the target basis directly if the user already knows it.
+    *   The effectiveness depends on the chosen `BASIS_LADDER` and the smoothness of convergence for the system.
+    *   Adds complexity to the workflow logic and configuration.
+
+## Alternatives Considered
+
+*   **Manual Selection:** Requiring users to manually choose and run calculations for different basis sets. (Less automated, more user effort).
+*   **Fixed Basis:** Only supporting calculations with a single, user-specified basis set. (Lacks adaptability).
+
+## Related ADRs
+
+*   ADR-0002: Workflow Orchestration and Result Handling

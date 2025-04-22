@@ -8,7 +8,8 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 from saptase.core.models import Molecule, SaptResult, SaptTask, TaskStatus
-from saptase.workflows.adaptive import AdaptiveWorkflow
+from saptase.workflows.adaptive import AdaptiveWorkflow 
+from saptase.core.orchestrator import run_adaptive_workflow 
 from saptase.core.backend import SaptBackend
 from saptase.core.basis import BASIS_LADDER
 
@@ -52,8 +53,10 @@ class MockAdaptiveBackend(SaptBackend):
     Simulates the adaptive workflow process.
     """
     def __init__(self, results_by_basis: Dict[str, Dict[str, float]], fail_on_basis: Optional[str] = None):
-        self.results_by_basis = results_by_basis
-        self.fail_on_basis = fail_on_basis
+        # Store results with lowercase keys for case-insensitive lookup
+        self._results = {k.lower(): v for k, v in results_by_basis.items()}
+        self.fail_on_basis = fail_on_basis.lower() if fail_on_basis else None # Store lowercase
+        self.call_history = [] # Track calls
         # Basic component map for dummy results
         self.component_map = {
              "SAPT0 Total Energy": "sapt_total",
@@ -65,25 +68,39 @@ class MockAdaptiveBackend(SaptBackend):
 
     def calculate(self, task: SaptTask) -> SaptResult:
         """Return a predefined result or simulate failure."""
-        basis = task.basis_set
-        if basis == self.fail_on_basis:
-            # Simulate failure
-            result = SaptResult(task_id=task.id, success=False, error_message=f"Simulated failure for basis {basis}")
-            task.status = TaskStatus.FAILED
-            return result
-        elif basis in self.results_by_basis:
-            # Return predefined success result
-            energies = self.results_by_basis[basis]
-            result = SaptResult(task_id=task.id, success=True)
-            result.energies = energies
+        self.call_history.append(task.basis_set) # Record basis called with
+        # Lookup using lowercase basis
+        basis_key = task.basis_set.lower()
+        if basis_key in self._results:
+            # Simulate successful result with simplified energies
+            # Convert simplified keys back to full names if needed, or adjust tests
+            raw_energies = self._results[basis_key]
+            # Ensure we have a 'total' if possible
+            if 'total' not in raw_energies:
+                 # Quick sum for mock purposes if 'total' isn't specified
+                 raw_energies['total'] = sum(v for k, v in raw_energies.items() if k != 'total')
+
+            # Construct a minimal SaptResult
+            # Note: We need to ensure the keys match what _check_convergence expects
+            # For simplicity, let's assume the mock results keys are already simplified
+            result = SaptResult(
+                task_id=task.id,
+                energies=raw_energies, # Store the raw dictionary
+                success=True
+            )
             # Mock the method directly on the instance for testing
             result.get_sapt_component_map = lambda: self.component_map
             task.status = TaskStatus.COMPLETED
             return result
+        elif basis_key == self.fail_on_basis:
+            # Simulate failure
+            result = SaptResult(task_id=task.id, success=False, error_message=f"Simulated failure for basis {task.basis_set}")
+            task.status = TaskStatus.FAILED
+            return result
         else:
             # Basis not defined in mock results - treat as error? Or default?
             # For testing, let's treat it as a failure.
-            result = SaptResult(task_id=task.id, success=False, error_message=f"Mock backend has no result defined for basis {basis}")
+            result = SaptResult(task_id=task.id, success=False, error_message=f"Mock backend has no result defined for basis {task.basis_set}")
             task.status = TaskStatus.FAILED
             return result
 
@@ -100,9 +117,9 @@ def test_run_adaptive_converges():
     """Test adaptive workflow reaching convergence before max_rung."""
     # Define mock results simulating convergence at aug-cc-pVDZ (rung 1)
     mock_energies = {
-        "jun-cc-pVDZ": {"total": -10.0, "elst": -5.0}, # Rung 0
-        "aug-cc-pVDZ": {"total": -10.05, "elst": -4.98}, # Rung 1 (Converges)
-        "jun-cc-pVTZ": {"total": -10.06, "elst": -4.97}, # Rung 2 (Not reached)
+        "jun-cc-pvdz": {"total": -10.0, "elst": -5.0}, # Rung 0
+        "aug-cc-pvdz": {"total": -10.05, "elst": -4.98}, # Rung 1 (Converges)
+        "jun-cc-pvtz": {"total": -10.06, "elst": -4.97}, # Rung 2 (Not reached)
     }
     # Define target accuracy where rung 1 should converge
     target_accuracy = {"sapt_total": 0.1, "elst": 0.05} # ΔE = 0.05 <= 0.1, ΔE = 0.02 <= 0.05
@@ -130,7 +147,7 @@ def test_run_adaptive_converges():
     assert final_result is not None
     assert final_result.success
     # Verify it's the result from the *converged* rung (rung 1)
-    assert final_result.energies == mock_energies["aug-cc-pVDZ"]
+    assert final_result.energies == mock_energies["aug-cc-pvdz"]
     # Check the internal rung results dict (optional, for debugging)
     assert len(workflow.results_by_rung) == 2 # Ran rung 0 and 1
     assert workflow.results_by_rung[0].task_id == f"{start_task.id}_rung0"
@@ -141,9 +158,9 @@ def test_run_adaptive_reaches_max_rung():
     """Test adaptive workflow reaching max_rung without convergence."""
     # Define mock results simulating non-convergence up to max_rung
     mock_energies = {
-        "jun-cc-pVDZ": {"total": -10.0}, # Rung 0
-        "aug-cc-pVDZ": {"total": -10.5}, # Rung 1
-        "jun-cc-pVTZ": {"total": -10.9}, # Rung 2 (Max)
+        "jun-cc-pvdz": {"total": -10.0}, # Rung 0
+        "aug-cc-pvdz": {"total": -10.5}, # Rung 1
+        "jun-cc-pvtz": {"total": -10.9}, # Rung 2 (Max)
     }
     target_accuracy = {"sapt_total": 0.1} # Never converges with these energies
     mock_backend = MockAdaptiveBackend(results_by_basis=mock_energies)
@@ -171,14 +188,14 @@ def test_run_adaptive_reaches_max_rung():
     final_rung_result = results[f"{start_task.id}_rung{max_rung_idx}"]
     assert final_rung_result.success
     # Check energy keys were simplified
-    assert final_rung_result.energies == {"total": mock_energies[BASIS_LADDER[max_rung_idx]]["total"]}
+    assert final_rung_result.energies == {"total": mock_energies["jun-cc-pvtz"]["total"]}
     assert len(workflow.results_by_rung) == max_rung_idx + 1 # Rungs 0, 1, 2 run
 
 
 def test_run_adaptive_fails_midway():
     """Test adaptive workflow handling a failure during a rung."""
     mock_energies = {
-        "jun-cc-pVDZ": {"total": -10.0}, # Rung 0 (Success)
+        "jun-cc-pvdz": {"total": -10.0}, # Rung 0 (Success)
         # Rung 1 will be configured to fail in the mock backend
     }
     target_accuracy = {"sapt_total": 0.1}
@@ -210,7 +227,7 @@ def test_run_adaptive_fails_midway():
     # Verify rung 0 was successful
     rung0_result = results[f"{start_task.id}_rung0"]
     assert rung0_result.success
-    assert rung0_result.energies == {"total": mock_energies[BASIS_LADDER[0]]["total"]}
+    assert rung0_result.energies == {"total": mock_energies["jun-cc-pvdz"]["total"]}
 
     # Verify rung 1 failed
     rung1_result = results[f"{start_task.id}_rung1"]
@@ -222,22 +239,22 @@ def test_run_adaptive_fails_midway():
 def test_run_adaptive_start_from_higher_rung():
     """Test adaptive workflow starting from a basis higher in the ladder."""
     mock_energies = {
-        # Rung 0 (jun-cc-pVDZ) - Should not be run
-        "aug-cc-pVDZ": {"total": -10.0, "elst": -5.0}, # Rung 1 (Start)
-        "jun-cc-pVTZ": {"total": -10.05, "elst": -4.98}, # Rung 2 (Converges)
-        "aug-cc-pVTZ": {"total": -10.06, "elst": -4.97}, # Rung 3 (Not reached)
+        # Rung 0 (jun-cc-pvdz) - Should not be run
+        "aug-cc-pvdz": {"total": -10.0, "elst": -5.0}, # Rung 1 (Start)
+        "jun-cc-pvtz": {"total": -10.05, "elst": -4.98}, # Rung 2 (Converges)
+        "aug-cc-pvtz": {"total": -10.06, "elst": -4.97}, # Rung 3 (Not reached)
     }
     target_accuracy = {"sapt_total": 0.1, "elst": 0.05} # Converges at rung 2
     mock_backend = MockAdaptiveBackend(results_by_basis=mock_energies)
     adaptive_options = {"target_accuracy": target_accuracy, "max_rung": 3}
 
     # Start task from Rung 1
-    start_basis = BASIS_LADDER[1] # aug-cc-pVDZ
+    start_basis = BASIS_LADDER[1] # aug-cc-pvdz
     start_task = SaptTask(id="higher_start_test", monomer_a=mol_a, monomer_b=mol_b, basis_set=start_basis)
 
     workflow = AdaptiveWorkflow(
         tasks=[start_task],
-        backend_name="mock",
+        backend_name="mock", # Use mock backend
         adaptive_options=adaptive_options,
     )
     workflow.backend = mock_backend
@@ -250,9 +267,10 @@ def test_run_adaptive_start_from_higher_rung():
     final_result = results[start_task.id]
     assert final_result is not None
     assert final_result.success
-    # Verify convergence occurred at the expected rung (rung 2 = BASIS_LADDER[2])
+    # Verify convergence occurred at the expected rung (rung 2)
+    assert final_result.task_id == f"{start_task.id}_rung2" # ID reflects final rung
     # Check the energies match the converged rung's mock data
-    assert final_result.energies == mock_energies[BASIS_LADDER[2]] # jun-cc-pVTZ
+    assert final_result.energies == mock_energies["jun-cc-pvtz"] # jun-cc-pvtz
     # Check internal state: Should have run rungs 1 and 2
     assert len(workflow.results_by_rung) == 2
     assert 0 not in workflow.results_by_rung # Rung 0 should not have run
@@ -260,6 +278,60 @@ def test_run_adaptive_start_from_higher_rung():
     assert 2 in workflow.results_by_rung
     assert workflow.results_by_rung[1].task_id == f"{start_task.id}_rung1"
     assert workflow.results_by_rung[2].task_id == f"{start_task.id}_rung2"
+
+
+# --- Integration-Style Test using Convenience Function ---
+
+def test_integration_adaptive_workflow(monkeypatch):
+    """Integration test using run_adaptive_workflow and mock backend."""
+    # Mock results simulating convergence at rung 2 (jun-cc-pvtz)
+    mock_energies = {
+        "jun-cc-pvdz": {"total": -10.0, "elst": -5.0},
+        "aug-cc-pvdz": {"total": -10.5, "elst": -4.9}, # Delta E = 0.5 > 0.1, Elst = 0.1 > 0.05
+        "jun-cc-pvtz": {"total": -10.55, "elst": -4.88}, # Delta E = 0.05 <= 0.1, Elst = 0.02 <= 0.05 -> Converges
+        "aug-cc-pvtz": {"total": -10.56, "elst": -4.87},
+    }
+    target_accuracy = {"sapt_total": 0.1, "elst": 0.05}
+    adaptive_options = {"target_accuracy": target_accuracy, "max_rung": 3}
+    mock_backend_instance = MockAdaptiveBackend(results_by_basis=mock_energies)
+
+    # Mock the MockBackend constructor where get_backend('mock') will find it
+    def mock_backend_constructor(*args, **kwargs):
+        # This will be called when get_backend('mock') executes 'return MockBackend()'
+        return mock_backend_instance
+
+    # Patch the MockBackend class where get_backend imports it from
+    monkeypatch.setattr("saptase.core.orchestrator.MockBackend", mock_backend_constructor)
+
+    # Task starting at the lowest rung
+    start_task = SaptTask(id="integration_test", monomer_a=mol_a, monomer_b=mol_b, basis_set=BASIS_LADDER[0])
+
+    # Run the workflow using the convenience function
+    results = run_adaptive_workflow(
+        tasks=[start_task],
+        backend_name="mock", # This will trigger the use of orchestrator.MockBackend
+        adaptive_options=adaptive_options,
+    )
+
+    # Assertions:
+    # 1. Converged, so result is keyed by original task ID
+    assert len(results) == 1
+    assert start_task.id in results
+    final_result = results[start_task.id]
+    assert final_result is not None
+    assert final_result.success
+
+    # 2. Convergence occurred at the expected rung (rung 2)
+    assert final_result.task_id == f"{start_task.id}_rung2" # ID reflects final rung
+    # Check the energies match the converged rung's mock data
+    assert final_result.energies == mock_energies["jun-cc-pvtz"]
+
+    # 3. Check mock backend call history (optional)
+    assert mock_backend_instance.call_history == [
+        BASIS_LADDER[0], # jun-cc-pvdz
+        BASIS_LADDER[1], # aug-cc-pvdz
+        BASIS_LADDER[2], # jun-cc-pvtz (converged)
+    ]
 
 
 # --- Tests for _check_convergence ---

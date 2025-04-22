@@ -187,3 +187,20 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Modified `AdaptiveWorkflow.run_adaptive` to avoid modifying the `task_id` of the converged `SaptResult` object *in place*, ensuring the internal `results_by_rung` dictionary retained correct rung-specific IDs while the final returned dictionary used the original primary task ID as the key.
     - Adjusted test expectations in `test_check_convergence` to align with the corrected logic for handling missing components and target accuracy keys.
 - **Outcome:** All tests in `tests/test_adaptive.py` and the full project test suite are now passing.
+
+### April 22, 2025: Fixing Integration Test Mocking
+
+- **Objective:** Resolve failures in `tests/test_adaptive.py::test_integration_adaptive_workflow` caused by incorrect mocking of the backend dependency when calling `run_adaptive_workflow`.
+- **Debugging Process:**
+    - Initially assumed `run_adaptive_workflow` (in `saptase.core.orchestrator`) directly used a `get_backend` factory function.
+    - Attempted to `monkeypatch.setattr` on:
+        - `saptase.core.factory.get_backend` (Module not found/incorrect guess).
+        - `saptase.core.orchestrator.get_backend` (AttributeError: `get_backend` not directly in orchestrator).
+        - `saptase.workflows.adaptive.get_backend` (AttributeError: `get_backend` not directly in adaptive workflow module).
+    - Investigated the call chain: `run_adaptive_workflow` -> instantiates `AdaptiveWorkflow` -> `AdaptiveWorkflow.__init__`.
+    - Discovered `AdaptiveWorkflow.__init__` does **not** use a generic `get_backend` factory. Instead, it has hardcoded logic to instantiate `Psi4Backend` or `MockBackend` (imported locally from `saptase.core.orchestrator`) based on the `backend_name` string.
+- **Key Fixes:**
+    - Modified `test_integration_adaptive_workflow` to use `backend_name="mock"` when calling `run_adaptive_workflow`.
+    - Changed the `monkeypatch` target to patch the `MockBackend` class *constructor* directly within the module where `AdaptiveWorkflow.__init__` imports it from: `monkeypatch.setattr("saptase.core.orchestrator.MockBackend", mock_backend_constructor)`.
+    - Updated the assertion `assert final_result.task_id == start_task.id` to `assert final_result.task_id == f"{start_task.id}_rung2"`, reflecting that the returned result's ID includes the rung it converged on.
+- **Outcome:** The `test_integration_adaptive_workflow` now passes, correctly mocking the backend instantiation within the `AdaptiveWorkflow` initialization.
