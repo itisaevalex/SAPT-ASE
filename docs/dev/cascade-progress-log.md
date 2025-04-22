@@ -204,3 +204,24 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Changed the `monkeypatch` target to patch the `MockBackend` class *constructor* directly within the module where `AdaptiveWorkflow.__init__` imports it from: `monkeypatch.setattr("saptase.core.orchestrator.MockBackend", mock_backend_constructor)`.
     - Updated the assertion `assert final_result.task_id == start_task.id` to `assert final_result.task_id == f"{start_task.id}_rung2"`, reflecting that the returned result's ID includes the rung it converged on.
 - **Outcome:** The `test_integration_adaptive_workflow` now passes, correctly mocking the backend instantiation within the `AdaptiveWorkflow` initialization.
+
+### April 22, 2025: Backend Refactoring and SCF Recovery Implementation
+- **Objective:** Enhance the robustness of the `Psi4Backend` by adding automatic recovery for SCF convergence failures and refactor the backend code for better maintainability.
+- **Actions:**
+  - Refactored the `Psi4Backend` class to improve code organization and readability.
+  - Defined `SCF_RECOVERY_LADDER` constant in `saptase.core.backend` with increasingly robust Psi4 SCF options.
+  - Modified `Psi4Backend.calculate` to loop through the ladder upon `psi4.SCFConvergenceError`.
+  - Caught the specific Psi4 convergence error and raised a standard `RuntimeError` if all attempts fail.
+  - Added unit tests (`tests/test_backend.py`) using `unittest.mock` to simulate SCF failures and verify recovery/failure scenarios.
+  - Updated docstrings for `Psi4Backend` and `calculate` method.
+- **Outcome:** Successfully implemented and tested the SCF recovery mechanism. All backend tests pass.
+
+### April 22, 2025: Fixing Adaptive Workflow Tests (Post-Refactoring)
+- **Objective:** Resolve failing tests in `tests/test_adaptive.py` related to the `AdaptiveWorkflow` implementation after the backend refactoring.
+- **Debugging Process:**
+    - Identified and fixed `AttributeError` related to accessing `MockAdaptiveBackend` attributes after refactoring.
+    - Corrected logic in `_check_convergence` to properly handle missing/unmappable keys in `target_accuracy` and missing energy components in results after refactoring.
+- **Key Fixes:**
+    - Modified `AdaptiveWorkflow.run_adaptive` to correctly handle the refactored backend's behavior.
+    - Adjusted test expectations in `test_check_convergence` to align with the corrected logic for handling missing components and target accuracy keys after refactoring.
+- **Outcome:** All tests in `tests/test_adaptive.py` and the full project test suite are now passing after the backend refactoring.

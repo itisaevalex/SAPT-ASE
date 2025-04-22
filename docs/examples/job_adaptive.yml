@@ -5,8 +5,8 @@ backend: psi4
 
 # Molecule specification (paths relative to this file or absolute)
 molecules:
-  - water_monomer_A.xyz
-  - water_monomer_B.xyz
+  - monA.xyz
+  - monB.xyz
 
 # Task definition - Use 'adaptive' key to trigger the adaptive workflow
 task: adaptive
@@ -16,16 +16,19 @@ adaptive:
   # Tolerances for convergence check (absolute difference between rungs, kcal/mol)
   # Workflow stops if *all* specified tolerances are met.
   target_accuracy:
-    sapt_total: 0.5   # Tolerance for the total SAPT energy difference
-    disp: 0.2         # Tolerance for the dispersion energy difference
+    sapt_total: 0.5   # kcal mol-1
+    disp: 0.2
     # Add other components like elst, exch, ind if needed
     # elst: 0.3
     # exch: 0.3
     # ind: 0.3
 
-  # Maximum rung index on the BASIS_LADDER to attempt (0-based)
-  # 0: jun-cc-pVDZ, 1: aug-cc-pVDZ, 2: jun-cc-pVTZ, 3: aug-cc-pVTZ
-  max_rung: 3         # Corresponds to aug-cc-pVTZ in the default ladder
+  # Maximum rung index (0-based) from BASIS_LADDER to attempt
+  # Example: 3 corresponds to aug-cc-pVTZ in the default ladder
+  max_rung: 3
+
+  # Starting basis set (optional, defaults to the first rung, e.g., jun-cc-pVDZ)
+  # start_basis: "jun-cc-pVDZ"
 
 # Optional: Psi4 specific keywords can still be provided
 # These will be applied to *all* calculations in the ladder

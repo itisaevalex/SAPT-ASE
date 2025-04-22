@@ -46,6 +46,12 @@ This guide defines the engineering workflow for building **saptase**, covering c
 ### 3.3 Regression Benchmarks
 * Store known energies for (H₂O)₂ and (NH₃)₂ in `/tests/data/`.  Fail build if deviation > 1e‑6 Ha.
 
+### 3.4 Adaptive Basis Set Workflow
+*   **Logic:** The `AdaptiveWorkflow` (in `saptase.workflows.adaptive`) implements basis set escalation. It starts with a basis set (either specified by the user or the default first rung) and runs SAPT calculations iteratively up the `BASIS_LADDER` (defined in `saptase.core.basis`).
+*   **Convergence:** After each rung (except the first), it compares the absolute difference in SAPT energy components between the current and previous rung against user-defined tolerances specified in the `target_accuracy` map in the job configuration.
+*   **Stopping:** The workflow stops when all specified tolerances are met, or when the `max_rung` limit is reached. The final `SaptResult` indicates the basis set level at which convergence was achieved (or the max rung reached).
+*   **Example Configuration:** See `docs/examples/job_adaptive.yml` for an example of how to configure an adaptive workflow job, including setting `target_accuracy` and `max_rung`.
+
 ---
 ## 4  Continuous Integration
 ### 4.1 Pipeline Stages (GitHub Actions)

@@ -78,9 +78,12 @@ logger = logging.getLogger(__name__)
 
 
 class Psi4Backend(SaptBackend):
-    """Backend for SAPT calculations using Psi4.
+    """Backend for SAPT calculations using the Psi4 quantum chemistry package.
 
-    For MVP, this implements only single-threaded SAPT0 with jun-cc-pVDZ.
+    This backend handles the execution of SAPT calculations via Psi4,
+    including setting up the molecular geometry, applying calculation options,
+    running the energy calculation, and extracting results.
+    It also implements an automatic SCF convergence recovery mechanism.
     """
 
     # --- Constants for Psi4Backend --- #
@@ -111,13 +114,20 @@ class Psi4Backend(SaptBackend):
             raise ImportError("Psi4 is required for this backend but could not be imported")
 
     def calculate(self, task: SaptTask) -> SaptResult:
-        """Perform a SAPT calculation using Psi4.
+        """Perform a SAPT calculation using Psi4 with SCF recovery.
+
+        This method sets up and runs the specified SAPT task using Psi4.
+        If the initial SCF calculation fails to converge, it automatically
+        retries the calculation using a sequence of more robust SCF options
+        defined in `SCF_RECOVERY_LADDER`.
 
         Args:
             task: The SAPT calculation task to perform
 
         Returns:
-            A SaptResult containing the calculation results
+            A SaptResult containing the calculation results, or details
+            of the failure if the calculation (including recovery attempts)
+            is unsuccessful.
         """
         # Create a result object with the task ID
         result = SaptResult(task_id=task.id)
