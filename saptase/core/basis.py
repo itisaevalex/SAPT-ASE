@@ -93,6 +93,24 @@ def get_next_basis(basis_set_name: str) -> Optional[str]:
     return BASIS_LADDER[current_rung + 1]
 
 
+def get_previous_basis(basis_set_name: str) -> Optional[str]:
+    """Gets the name of the previous (smaller) basis set in the ladder.
+
+    Comparison is case-insensitive.
+
+    Args:
+        basis_set_name: The name of the current basis set.
+
+    Returns:
+        The name of the previous basis set in the ladder, or None if the
+        current basis is not found or is the first one.
+    """
+    current_rung = get_basis_rung(basis_set_name)
+    if current_rung is None or current_rung == 0:
+        return None # Not found or already at the smallest
+    return BASIS_LADDER[current_rung - 1]
+
+
 def get_basis_rung_original(basis_name: str) -> Optional[int]:
     """Get the rung index (0-based) of a basis set in the ladder.
 

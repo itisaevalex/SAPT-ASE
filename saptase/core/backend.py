@@ -3,13 +3,20 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import logging
+import re
+from .models import Molecule, SaptResult, SaptTask, TaskStatus
+from .errors import (
+    BasisIncompatible,
+    MemoryExceeded,
+    PsiProgramCrashed,
+    SaptError,
+    ScfFailed,
+)
 
 try:
     import psi4
 except ImportError:
     psi4 = None  # Allow running the module without Psi4 installed
-
-from .models import SaptResult, SaptTask, TaskStatus
 
 
 class SaptBackend(ABC):
@@ -190,10 +197,35 @@ class Psi4Backend(SaptBackend):
                     # psi4.core.clean_options() # Might be needed?
                     # psi4.core.clean_variables() # Might be needed?
                     continue  # Try next set of options
-                # Catch other potential Psi4 errors during energy call?
+                except psi4.ValidationError as e:
+                    # Basic check for basis set issues in validation errors
+                    if "basis set" in str(e).lower():
+                        logger.warning(f"Task {task.id} failed: Basis incompatibility suspected.")
+                        raise BasisIncompatible("Basis set incompatible or invalid.", e)
+                    else:
+                        logger.error(f"Task {task.id} failed: Psi4 validation error: {e}")
+                        raise PsiProgramCrashed(f"Psi4 validation error: {e}", e)
+                except psi4.PsiException as e:
+                    # Catch-all for other Psi4 core exceptions
+                    error_str = str(e).lower()
+                    if "memoryerror" in error_str or "malloc" in error_str:
+                        logger.error(f"Task {task.id} failed: Memory allocation error suspected.")
+                        raise MemoryExceeded("Memory allocation/limit error.", e)
+                    elif "basis set" in error_str:
+                        # Sometimes basis issues appear here too
+                        logger.warning(f"Task {task.id} failed: Basis incompatibility suspected.")
+                        raise BasisIncompatible("Basis set incompatible or invalid.", e)
+                    else:
+                        logger.error(f"Task {task.id} failed: Generic Psi4 exception: {e}")
+                        raise PsiProgramCrashed(f"Generic Psi4 execution error: {e}", e)
+                except MemoryError as e:
+                    # Catch Python-level MemoryError
+                    logger.error(f"Task {task.id} failed: Python MemoryError.")
+                    raise MemoryExceeded("Python MemoryError during execution.", e)
                 except Exception as e:
-                    logger.error(f"Non-SCF Psi4 error during energy calculation on attempt {attempt+1}: {e}")
-                    raise  # Re-raise other Psi4 errors immediately
+                    # Catch any other unexpected errors during Psi4 execution
+                    logger.error(f"Task {task.id} failed: Unexpected error: {type(e).__name__}: {e}")
+                    raise PsiProgramCrashed(f"Unexpected error during Psi4 call: {type(e).__name__}: {e}", e)
 
             # --- End SCF Loop --- #
 
@@ -204,8 +236,8 @@ class Psi4Backend(SaptBackend):
                     # Ensure we append the string representation of the last error
                     error_msg += f" Last error: {str(last_scf_error)}"
                 # Raise a standard error; the outer handler will catch it.
-                raise RuntimeError(error_msg) 
- 
+                raise ScfFailed(error_msg)
+
             # --- Extract results (only if SCF succeeded) --- #
             result.energies = {
                 "total": psi4.variable("SAPT TOTAL ENERGY"),
