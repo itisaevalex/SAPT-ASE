@@ -6,6 +6,12 @@ This module contains the main workflow logic for SAPT calculations.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+# Imports for parallel execution
+import concurrent.futures
+import os
+
+from tqdm import tqdm
+
 from .backend import Psi4Backend, SaptBackend
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
 
@@ -46,6 +52,18 @@ def get_default_backend() -> SaptBackend:
         return Psi4Backend()
     except ImportError:
         return MockBackend()
+
+
+# Helper function for parallel execution (must be top-level for pickling)
+def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask) -> SaptResult:
+    """Worker function to run a single task, setting thread count."""
+    # Ensure Psi4 (if used) runs single-threaded within the worker process
+    os.environ["OMP_NUM_THREADS"] = "1"
+    # It might be necessary to re-initialize backend components here
+    # if they are not process-safe or picklable, but Psi4Backend
+    # relies on subprocess calls, which should be fine.
+    result = backend.calculate(task)
+    return result
 
 
 @dataclass
@@ -120,6 +138,56 @@ class SaptWorkflow:
             result = self.backend.calculate(task)
             self.results[task.id] = result
 
+        return self.results
+
+    def run_local_parallel(self, max_workers: Optional[int] = None) -> Dict[str, SaptResult]:
+        """Run all pending tasks in parallel on the local machine.
+
+        Args:
+            max_workers: Maximum number of worker processes. Defaults to os.cpu_count().
+
+        Returns:
+            Dictionary mapping task IDs to results
+        """
+        # Filter tasks that need to be run
+        pending_tasks = [
+            task
+            for task in self.tasks
+            if task.status == TaskStatus.PENDING
+        ]
+
+        if not pending_tasks:
+            print("No pending tasks to run.")
+            return self.results
+
+        print(f"Running {len(pending_tasks)} tasks in parallel (max_workers={max_workers or os.cpu_count()})...")
+        
+        # Ensure the main script is guarded by if __name__ == '__main__':
+        # This is crucial for multiprocessing on Windows.
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Use executor.map to apply the function to the tasks
+            # Wrap with tqdm for progress bar
+            future_to_task = {executor.submit(_execute_task_for_parallel, self.backend, task): task for task in pending_tasks}
+            results_list = []
+            for future in tqdm(concurrent.futures.as_completed(future_to_task), total=len(pending_tasks)):
+                task = future_to_task[future]
+                try:
+                    result = future.result()
+                    self.results[task.id] = result
+                    results_list.append(result)
+                except Exception as exc:
+                    print(f'{task.id} generated an exception: {exc}')
+                    # Create a failure result
+                    fail_result = SaptResult(
+                        task_id=task.id,
+                        success=False,
+                        error_message=str(exc),
+                    )
+                    self.results[task.id] = fail_result
+                    results_list.append(fail_result)
+
+        print(f"Parallel execution finished. Processed {len(results_list)} tasks.")
         return self.results
 
     def get_result(self, task_id: str) -> Optional[SaptResult]:

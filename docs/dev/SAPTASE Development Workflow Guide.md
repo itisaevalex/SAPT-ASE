@@ -31,6 +31,12 @@ This guide defines the engineering workflow for building **saptase**, covering c
 ### 3.2 Integration Tests
 * Spin‑up local Dask cluster (3 workers) within test; submit two dummy tasks.
 * Verify provenance DB records and result aggregation.
+* **Local Parallelism:** Implement `run_local_parallel` using `concurrent.futures.ProcessPoolExecutor`. Ensure tests cover:
+    - Correct distribution of tasks (e.g., two water dimers).
+    - Aggregation of results from multiple processes.
+    - Wall time reduction compared to serial execution.
+    - Proper handling of `OMP_NUM_THREADS=1` in worker processes.
+    - Pickling of `SaptTask` objects.
 
 ### 3.3 Regression Benchmarks
 * Store known energies for (H₂O)₂ and (NH₃)₂ in `/tests/data/`.  Fail build if deviation > 1e‑6 Ha.
@@ -85,4 +91,3 @@ This guide defines the engineering workflow for building **saptase**, covering c
 
 ---
 _End of Development Workflow Guide_
-

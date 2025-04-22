@@ -69,12 +69,12 @@ class Psi4Backend(SaptBackend):
             b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
 
             # Format the molecule for Psi4 with fragment separation
+            # Charge and multiplicity must be specified per fragment
             molecule_str = (
-                f"{task.monomer_a.charge} {task.monomer_a.multiplicity} / "
-                f"{task.monomer_b.charge} {task.monomer_b.multiplicity}\n"
-                f"--\n"
+                f"{task.monomer_a.charge} {task.monomer_a.multiplicity}\n"
                 f"{a_xyz}\n"
                 f"--\n"
+                f"{task.monomer_b.charge} {task.monomer_b.multiplicity}\n"
                 f"{b_xyz}\n"
             )
 
