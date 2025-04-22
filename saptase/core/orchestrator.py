@@ -174,11 +174,13 @@ class SaptWorkflow:
             for future in tqdm(
                 concurrent.futures.as_completed(future_to_task), total=len(pending_tasks)
             ):
-                task = future_to_task[future]
+                task = future_to_task[future] # This is the original task object from self.tasks
                 try:
                     result = future.result()
                     self.results[task.id] = result
                     results_list.append(result)
+                    # Update the status of the original task object
+                    task.status = TaskStatus.COMPLETED if result.success else TaskStatus.FAILED
                 except Exception as exc:
                     print(f"{task.id} generated an exception: {exc}")
                     # Create a failure result
@@ -189,6 +191,8 @@ class SaptWorkflow:
                     )
                     self.results[task.id] = fail_result
                     results_list.append(fail_result)
+                    # Update the status of the original task object
+                    task.status = TaskStatus.FAILED
 
         print(f"Parallel execution finished. Processed {len(results_list)} tasks.")
         return self.results

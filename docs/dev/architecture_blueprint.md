@@ -1,4 +1,3 @@
-
 # Automated Multi‑Fidelity SAPT(DFT) 
 Adaptive Basis Selection • Error Recovery • Multipoles & ML Surrogates
 
@@ -51,7 +50,7 @@ Adaptive Basis Selection • Error Recovery • Multipoles & ML Surrogat
 
 - ASE builds and samples dimers.
     
-- Back‑end abstraction: `"psi4"` (default) | `"camcasp"` | `"sapt2020"`.
+- Back‑end abstraction: `"psi4"` (efault) | `"camcasp"` | `"sapt2020"`.
     
 - Fragment separation enforced at I/O layer.
     
@@ -108,7 +107,7 @@ Escalation ladder
     
 - **Logging** – SQLite; schema versioned; auto‑vacuum on close.
     
-- **Parallelism** – multiprocessing ≤ 8 jobs; Dask beyond.
+- **Parallelism** – Local execution via `SaptWorkflow.run_local_parallel` uses `concurrent.futures.ProcessPoolExecutor` for multi-core parallelism on a single machine (typically ≤ 8 jobs). Distributed execution across clusters leverages Dask.
     
 - **CI** – GitHub Actions executes linting, type‑checking & pytest on every push.
     

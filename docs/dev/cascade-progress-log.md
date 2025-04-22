@@ -121,6 +121,41 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
 
 ---
 
+### [2025-04-22] Local Parallelism Implementation (Phase 2)
+- **Objective:** Implement and test local parallel execution using `multiprocessing`.
+- **Steps Completed:**
+  - **Cleanup (Prep):**
+    - Renamed `saptase/io` to `saptase/interop` to avoid standard library shadowing (`ruff` A005). Updated all imports.
+    - Ran `ruff check --fix` and `black` to clean up codebase. Verified tests passed after cleanup.
+  - **Architecture (ADR-0002):**
+    - Created `docs/dev/adr/ADR-0002.md` documenting the decision to use `multiprocessing` (`ProcessPoolExecutor`) over `threading` or `Dask` for local parallelism, citing GIL avoidance and simplicity.
+  - **Implementation (`run_local_parallel`):**
+    - Added `run_local_parallel` method to `SaptWorkflow` (`saptase/core/orchestrator.py`) using `concurrent.futures.ProcessPoolExecutor`.
+    - Created top-level helper `_execute_task_for_parallel` which calls the backend's `calculate` method and sets `OMP_NUM_THREADS=1`.
+    - Added `tqdm` progress bar for task completion.
+  - **Testing (`tests/test_parallel.py`):**
+    - Created `test_parallel_run_correctness` using a mock backend (`SleepyMockBackend`) to verify task distribution, result aggregation, and status updates.
+    - Debugged and fixed initial failure where task status wasn't updated in the main process due to workers operating on copies. Modified `run_local_parallel` loop to update original task status based on future results.
+    - Created `test_parallel_speedup` (marked `@pytest.mark.slow`) to compare serial vs. parallel execution time (optional).
+    - Registered the `slow` marker in `pyproject.toml` to prevent `PytestUnknownMarkWarning`.
+  - **CI Update (`.github/workflows/ci.yml`):**
+    - Modified the `test` job to use a matrix strategy for `python-version: [3.10, 3.11]` and `os: [ubuntu-latest, windows-latest]`.
+    - Updated pytest command to `pytest -v -m "not slow"` to exclude the speedup test.
+    - Added `tqdm` to CI dependencies.
+  - **Documentation Updates:**
+    - Added notes on multiprocessing caveats (pickling, Windows guard, OMP_NUM_THREADS, state mutation) to `docs/dev/SAPTASE Development Workflow Guide.md` (Section 3.2).
+    - Updated the Parallelism description in `docs/dev/architecture_blueprint.md` (Section 4).
+
+**Status:**
+- Local parallel execution functionality implemented and tested with mocks.
+- All non-skipped tests pass, including the new parallel correctness test.
+- CI and documentation updated to reflect the changes.
+
+**Next Steps:**
+- Proceed to next development phase (e.g., distributed execution with Dask, implementing adaptive workflows, etc.).
+
+---
+
 ### [2025-04-22] Psi4 Installation and Test Fixes
 - **Troubleshooting Psi4 Installation (Windows/Conda):**
     - Encountered silent crashes on `import psi4` (suspected contribution from space in user directory/conda path).

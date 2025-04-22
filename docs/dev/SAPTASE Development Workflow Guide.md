@@ -37,6 +37,11 @@ This guide defines the engineering workflow for building **saptase**, covering c
     - Wall time reduction compared to serial execution.
     - Proper handling of `OMP_NUM_THREADS=1` in worker processes.
     - Pickling of `SaptTask` objects.
+* **Multiprocessing Caveats (for `run_local_parallel`)**:
+    *   **Pickling:** Objects passed between the main process and workers (like `SaptTask`, `SaptResult`, and potentially backend instances) must be pickleable. Dataclasses are generally fine, but avoid closures, generators, or complex non-serializable state.
+    *   **Windows Compatibility:** Process creation on Windows requires extra care. The main script invoking parallel execution *must* be guarded by `if __name__ == '__main__':`. Task execution functions called by workers typically need to be defined at the top level of a module.
+    *   **Thread Control (`OMP_NUM_THREADS`):** When worker processes call external programs (like Psi4) that might themselves be multithreaded, it's crucial to limit their thread count within the worker. Set `os.environ["OMP_NUM_THREADS"] = "1"` in the worker function (`_execute_task_for_parallel`) to prevent each worker from trying to use all available cores, leading to oversubscription and poor performance.
+    *   **State Mutation:** Workers operate on *copies* of input objects. Changes made to these copies (e.g., updating `task.status`) are not automatically reflected in the original objects in the main process. The main process needs to explicitly update its state based on the results returned by the workers.
 
 ### 3.3 Regression Benchmarks
 * Store known energies for (H₂O)₂ and (NH₃)₂ in `/tests/data/`.  Fail build if deviation > 1e‑6 Ha.
