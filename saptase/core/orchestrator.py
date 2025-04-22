@@ -7,7 +7,7 @@ This module contains the main workflow logic for SAPT calculations.
 import concurrent.futures
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from tqdm import tqdm
 
@@ -230,7 +230,9 @@ def run_sapt(
     Returns:
         The result of the SAPT calculation
     """
-    # Create a task
+    if backend is None:
+        backend = get_default_backend()
+
     task = SaptTask(
         monomer_a=monomer_a,
         monomer_b=monomer_b,
@@ -238,10 +240,40 @@ def run_sapt(
         method=method,
         additional_keywords=kwargs,
     )
+    result = backend.calculate(task)
+    return result
 
-    # Create a backend if none provided
-    if backend is None:
-        backend = get_default_backend()
 
-    # Run the calculation
-    return backend.calculate(task)
+# New convenience function for adaptive workflow
+def run_adaptive_workflow(
+    tasks: List[SaptTask],
+    backend_name: str = "psi4",
+    backend_options: Optional[Dict[str, Any]] = None,
+    adaptive_options: Optional[Dict[str, Any]] = None,
+    max_workers: Optional[int] = None,
+) -> Dict[str, SaptResult]:
+    """
+    Convenience function to instantiate and run an AdaptiveWorkflow.
+
+    Args:
+        tasks: List of SaptTask objects (typically one for adaptive mode).
+               The basis set in the task determines the starting point.
+        backend_name: Name of the computational backend.
+        backend_options: Options for the backend.
+        adaptive_options: Options for the adaptive workflow (e.g., 'target_accuracy').
+        max_workers: Maximum number of workers for parallel execution within rungs.
+
+    Returns:
+        Dictionary mapping the primary task ID to the final converged SaptResult,
+        or all results if the run fails early.
+    """
+    from saptase.workflows.adaptive import AdaptiveWorkflow
+
+    adaptive_workflow = AdaptiveWorkflow(
+        tasks=tasks,
+        backend_name=backend_name,
+        backend_options=backend_options,
+        adaptive_options=adaptive_options,
+    )
+    results = adaptive_workflow.run_adaptive(max_workers=max_workers)
+    return results

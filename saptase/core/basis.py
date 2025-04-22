@@ -55,3 +55,18 @@ def get_next_basis(current_basis: str) -> Optional[str]:
         return BASIS_LADDER[0]
 
     return None  # Already at the top of the ladder
+
+
+def get_basis_rung(basis_name: str) -> Optional[int]:
+    """Get the rung index (0-based) of a basis set in the ladder.
+
+    Args:
+        basis_name: The name of the basis set.
+
+    Returns:
+        The index of the basis set in BASIS_LADDER, or None if not found.
+    """
+    try:
+        return BASIS_LADDER.index(basis_name)
+    except ValueError:
+        return None

@@ -24,8 +24,12 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "tqdm>=4.60.0",
+    "ruamel.yaml>=0.17.0", # Added for config file parsing
 ]
 dynamic = ["version"]
+
+[project.scripts]
+saptase = "saptase.cli:main"
 
 [project.optional-dependencies]
 dev = [

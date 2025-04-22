@@ -175,3 +175,15 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Ran `pytest` in the activated `saptase-env`: **PASSED** (6 passed, 1 skipped).
 
 ---
+
+### April 22, 2025: Fixing Adaptive Workflow Tests
+
+- **Objective:** Resolve failing tests in `tests/test_adaptive.py` related to the `AdaptiveWorkflow` implementation.
+- **Debugging Process:**
+    - Identified and fixed `NameError` related to checking `MockAdaptiveBackend` by using `self.backend.__class__.__name__`.
+    - Corrected logic in `_check_convergence` to properly handle missing/unmappable keys in `target_accuracy` and missing energy components in results.
+    - Investigated test failures where the final result's `task_id` was unexpectedly modified.
+- **Key Fixes:**
+    - Modified `AdaptiveWorkflow.run_adaptive` to avoid modifying the `task_id` of the converged `SaptResult` object *in place*, ensuring the internal `results_by_rung` dictionary retained correct rung-specific IDs while the final returned dictionary used the original primary task ID as the key.
+    - Adjusted test expectations in `test_check_convergence` to align with the corrected logic for handling missing components and target accuracy keys.
+- **Outcome:** All tests in `tests/test_adaptive.py` and the full project test suite are now passing.
