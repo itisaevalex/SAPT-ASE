@@ -47,6 +47,7 @@ try:
     # We don't actually need to import psi4 here, just check if it's importable
     # import psi4
     import importlib.util
+
     if importlib.util.find_spec("psi4") is None:
         raise ImportError
     PSI4_AVAILABLE = True
@@ -200,12 +201,14 @@ def test_workflow_run_local_parallel_correctness(water_dimer):
 
     # Create a mock backend
     mock_backend = MagicMock()
-    mock_backend.calculate.side_effect = mock_psi4_calculate # Use existing mock
+    mock_backend.calculate.side_effect = mock_psi4_calculate  # Use existing mock
 
     # Create a workflow with the mock backend
     workflow = SaptWorkflow(backend=mock_backend)
     task1 = workflow.add_dimer(monomer_a, monomer_b, task_id="dimer_1")
-    task2 = workflow.add_dimer(monomer_a, monomer_b, task_id="dimer_2") # Add a second identical task
+    task2 = workflow.add_dimer(
+        monomer_a, monomer_b, task_id="dimer_2"
+    )  # Add a second identical task
 
     # Run the workflow in parallel (mocked backend is fast, so focus on correctness)
     # Needs __name__ == '__main__' guard if running directly, but pytest handles it.

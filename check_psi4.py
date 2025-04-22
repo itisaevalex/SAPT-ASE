@@ -1,8 +1,8 @@
-import sys
 import os
+import sys
 import traceback
 
-print(f"--- Starting Psi4 Import Check ---")
+print("--- Starting Psi4 Import Check ---")
 print(f"Python Executable: {sys.executable}")
 print(f"Current Working Directory: {os.getcwd()}")
 print(f"Python Path: {sys.path}")
@@ -10,7 +10,8 @@ print(f"Python Path: {sys.path}")
 try:
     print("Attempting to import psi4...")
     import psi4
-    print(f"Import successful!")
+
+    print("Import successful!")
     print(f"Psi4 Version: {psi4.__version__}")
     print(f"Psi4 Path: {psi4.__file__}")
 except ImportError as ie:
@@ -25,4 +26,4 @@ except BaseException as be:
     print(f"Caught BaseException: {be}")
     traceback.print_exc()
 finally:
-    print(f"--- Finished Psi4 Import Check ---")
+    print("--- Finished Psi4 Import Check ---")

@@ -75,7 +75,7 @@ class Molecule:
 
         for i in range(2, 2 + num_atoms):
             if i >= len(lines):
-                raise ValueError(f"Expected {num_atoms} atoms, found only {i-2}")
+                raise ValueError(f"Expected {num_atoms} atoms, found only {i - 2}")
 
             parts = lines[i].split()
             if len(parts) < 4:

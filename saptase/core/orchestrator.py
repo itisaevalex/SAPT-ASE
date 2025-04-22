@@ -3,12 +3,11 @@
 This module contains the main workflow logic for SAPT calculations.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-
 # Imports for parallel execution
 import concurrent.futures
 import os
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from tqdm import tqdm
 
@@ -150,34 +149,38 @@ class SaptWorkflow:
             Dictionary mapping task IDs to results
         """
         # Filter tasks that need to be run
-        pending_tasks = [
-            task
-            for task in self.tasks
-            if task.status == TaskStatus.PENDING
-        ]
+        pending_tasks = [task for task in self.tasks if task.status == TaskStatus.PENDING]
 
         if not pending_tasks:
             print("No pending tasks to run.")
             return self.results
 
-        print(f"Running {len(pending_tasks)} tasks in parallel (max_workers={max_workers or os.cpu_count()})...")
-        
+        print(
+            f"Running {len(pending_tasks)} tasks in parallel "
+            f"(max_workers={max_workers or os.cpu_count()})..."
+        )
+
         # Ensure the main script is guarded by if __name__ == '__main__':
         # This is crucial for multiprocessing on Windows.
-        
+
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Use executor.map to apply the function to the tasks
             # Wrap with tqdm for progress bar
-            future_to_task = {executor.submit(_execute_task_for_parallel, self.backend, task): task for task in pending_tasks}
+            future_to_task = {
+                executor.submit(_execute_task_for_parallel, self.backend, task): task
+                for task in pending_tasks
+            }
             results_list = []
-            for future in tqdm(concurrent.futures.as_completed(future_to_task), total=len(pending_tasks)):
+            for future in tqdm(
+                concurrent.futures.as_completed(future_to_task), total=len(pending_tasks)
+            ):
                 task = future_to_task[future]
                 try:
                     result = future.result()
                     self.results[task.id] = result
                     results_list.append(result)
                 except Exception as exc:
-                    print(f'{task.id} generated an exception: {exc}')
+                    print(f"{task.id} generated an exception: {exc}")
                     # Create a failure result
                     fail_result = SaptResult(
                         task_id=task.id,
