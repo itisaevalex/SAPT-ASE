@@ -1,0 +1,7 @@
+# Core dependencies for SAPTASE MVP
+numpy
+pytest
+black
+ruff
+# Psi4 is not available via pip/conda defaults for Windows; install manually if needed
+# psi4
