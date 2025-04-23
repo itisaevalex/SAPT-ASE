@@ -77,7 +77,7 @@ def test_escalation_context_apply_basis_incompatible(sample_task):
     assert modified_task.basis_set == "jun-cc-pvdz"
     assert modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
     assert len(context.history) == 1
-    assert context.history[0]["strategy"].__name__ == "recover_basis_incompatible"
+    assert context.history[0]["strategy_name"] == "recover_basis_incompatible"
     assert context.history[0]["error_type"] == "BasisIncompatible"
 
 def test_escalation_context_apply_scf_failed(sample_task):
@@ -183,7 +183,7 @@ def test_escalation_context_apply_second_attempt_scf(sample_task):
     assert task_retry2.basis_set == original_basis
 
     assert len(context.history) == 2
-    assert context.history[1]["strategy"].__name__ == "recover_scf_failed_simple"
+    assert context.history[1]["strategy_name"] == "recover_scf_failed_simple"
 
 
 def test_escalation_context_apply_third_attempt_memory(sample_task):
@@ -222,4 +222,4 @@ def test_escalation_context_apply_third_attempt_memory(sample_task):
     assert task_retry3.additional_keywords.get("d_convergence") == initial_d_conv
 
     assert len(context.history) == 3
-    assert context.history[2]["strategy"].__name__ == "recover_memory_exceeded"
+    assert context.history[2]["strategy_name"] == "recover_memory_exceeded"
