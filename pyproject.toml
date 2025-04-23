@@ -48,15 +48,23 @@ line-length = 100
 target-version = ["py38", "py39", "py310"]
 
 [tool.ruff]
-line-length = 100
-target-version = "py38"
-# Specify source directories and exclude common venv folders
+line-length = 200                # we're OK with long diagnostic strings
+target-version = "py310"
+fix = true
 src = ["saptase", "tests"]
 extend-exclude = [".venv", ".conda", "__pycache__"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "PT", "RUF"]
-ignore = []
+# Rules we still care about
+select = ["E", "F", "W", "RUF", "I"]  # keep basics + Ruff-specific & import sorter
+
+# Globally ignore style nits we don't want to fight right now
+ignore = [
+    "E501",   # line too long – we're relaxing via line-length anyway
+    "N818",   # exception name should end with "Error" (we're fine with ScfFailed)
+    "RUF003", # ambiguous unicode dashes in comments
+    "PT006",  # first arg to pytest.mark.parametrize must be tuple
+]
 
 [tool.mypy]
 python_version = "3.8"

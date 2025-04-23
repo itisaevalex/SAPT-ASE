@@ -5,8 +5,8 @@ def format_energy_delta(
     delta: float,
     tolerance: float,
     converged: bool,
-    unit: str = "kcal/mol", # Or Hartree?
-    precision: int = 4
+    unit: str = "kcal/mol",  # Or Hartree?
+    precision: int = 4,
 ) -> str:
     """Formats a user-friendly string for energy convergence check.
 

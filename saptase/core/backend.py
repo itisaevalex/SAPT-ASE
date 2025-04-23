@@ -1,10 +1,10 @@
 """Backend implementations for SAPT calculations."""
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 import logging
 import re
-from .models import Molecule, SaptResult, SaptTask, TaskStatus
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Dict, List, Optional
+
 from .errors import (
     BasisIncompatible,
     MemoryExceeded,
@@ -12,6 +12,7 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
+from .models import SaptResult, SaptTask, TaskStatus
 
 try:
     import psi4
@@ -36,9 +37,7 @@ class SaptBackend(ABC):
 
 
 # Backend Factory
-def get_backend(
-    backend_name: str, options: Optional[Dict[str, Any]] = None
-) -> SaptBackend:
+def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> SaptBackend:
     """Factory function to get a SaptBackend instance.
 
     Args:
@@ -65,12 +64,13 @@ def get_backend(
         try:
             # TODO: Consider moving MockBackend to core.backend or a testing module.
             from saptase.core.orchestrator import MockBackend
+
             # Mock backend might not take options, or we might pass them?
             # For now, assume it takes no options.
             return MockBackend()
-        except ImportError:
+        except ImportError as err:
             # This shouldn't happen if orchestrator exists, but good practice.
-            raise ValueError("Mock backend requested but MockBackend class not found.")
+            raise ValueError("Mock backend requested but MockBackend class not found.") from err
     # Add elif clauses for CamCASP, SAPT2020 etc. when implemented
     # elif backend_name_lower == "camcasp":
     #     return CamCASPBackend(**options)
@@ -94,7 +94,7 @@ class Psi4Backend(SaptBackend):
     """
 
     # --- Constants for Psi4Backend --- #
-    SCF_RECOVERY_LADDER: List[Dict[str, Any]] = [
+    SCF_RECOVERY_LADDER: ClassVar[List[Dict[str, Any]]] = [
         # Attempt 1: Default settings (implicitly used if no keywords below are set)
         {},  # Psi4's defaults
         # Attempt 2: Increase max iterations
@@ -169,9 +169,12 @@ class Psi4Backend(SaptBackend):
             scf_success = False
             last_scf_error = None
             for attempt, scf_options in enumerate(self.SCF_RECOVERY_LADDER):
-                logger.info(f"SCF Attempt {attempt + 1}/{len(self.SCF_RECOVERY_LADDER)} using options: {scf_options}")
-                psi4.core.clean_variables() # Clean variables between attempts
-                psi4.core.clean_options()   # Clean options between attempts
+                logger.info(
+                    f"SCF Attempt {attempt + 1}/{len(self.SCF_RECOVERY_LADDER)} "
+                    f"using options: {scf_options}"
+                )
+                psi4.core.clean_variables()  # Clean variables between attempts
+                psi4.core.clean_options()  # Clean options between attempts
                 # Re-apply base options + task keywords + attempt options
                 psi4_options = {
                     "basis": task.basis_set,
@@ -196,10 +199,13 @@ class Psi4Backend(SaptBackend):
                     last_scf_error = e
                     # Loop will continue to next attempt
                     continue
-                except (psi4.ValidationError, psi4.BasisSetNotFound) as e: # Catch BasisSetNotFound too
+                except (
+                    psi4.ValidationError,
+                    psi4.BasisSetNotFound,
+                ) as e:  # Catch BasisSetNotFound too
                     error_str = str(e).lower()
                     # Check for keywords indicating a basis set issue
-                    if re.search(r'basis set|basisset|could not find basis', error_str):
+                    if re.search(r"basis set|basisset|could not find basis", error_str):
                         logger.error(f"Basis set error encountered: {e}")
                         raise BasisIncompatible(str(e)) from e
                     else:
@@ -209,7 +215,7 @@ class Psi4Backend(SaptBackend):
                 except psi4.PsiException as e:
                     error_str = str(e).lower()
                     # Check for memory allocation errors
-                    if re.search(r'memoryerror|malloc|memory allocation|out of memory', error_str):
+                    if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
                         logger.error(f"Psi4 memory error detected: {e}")
                         raise MemoryExceeded(str(e)) from e
                     else:
@@ -219,9 +225,9 @@ class Psi4Backend(SaptBackend):
                 except Exception as e:
                     # Catch any other unexpected errors during psi4.energy
                     error_str = str(e).lower()
-                    if re.search(r'memoryerror|malloc|memory allocation|out of memory', error_str):
-                         logger.error(f"Potential memory error detected (non-PsiException): {e}")
-                         raise MemoryExceeded(str(e)) from e
+                    if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
+                        logger.error(f"Potential memory error detected (non-PsiException): {e}")
+                        raise MemoryExceeded(str(e)) from e
                     logger.error(f"Unexpected error during Psi4 calculation: {e}", exc_info=True)
                     raise PsiProgramCrashed(f"Unexpected error: {e}") from e
 
@@ -237,17 +243,19 @@ class Psi4Backend(SaptBackend):
             # Example: Extract SAPT0 components (adjust for other methods)
             # Ensure variables exist before accessing
             sapt_components = [
-                'SAPT0 TOTAL ENERGY',
-                'SAPT Electrostatics',
-                'SAPT Exchange',
-                'SAPT Induction',
-                'SAPT Dispersion'
+                "SAPT0 TOTAL ENERGY",
+                "SAPT Electrostatics",
+                "SAPT Exchange",
+                "SAPT Induction",
+                "SAPT Dispersion",
             ]
             for comp in sapt_components:
-                var_name = f'{task.method.upper()} {comp}' if 'SAPT0' not in comp else comp # Handle naming diffs
+                var_name = (
+                    f"{task.method.upper()} {comp}" if "SAPT0" not in comp else comp
+                )  # Handle naming diffs
                 if psi4.variable(var_name):
-                     # Convert Hartree to kcal/mol
-                     result.energies[comp] = psi4.variable(var_name) * 627.509
+                    # Convert Hartree to kcal/mol
+                    result.energies[comp] = psi4.variable(var_name) * 627.509
                 else:
                     logger.warning(f"Psi4 variable '{var_name}' not found after successful run.")
 
@@ -277,14 +285,18 @@ class Psi4Backend(SaptBackend):
             task.status = TaskStatus.FAILED
             result.success = False
             result.error_message = f"Unexpected backend error: {e}"
-            result.error_code = type(e).__name__ # Or a generic code like 'BackendError'
+            result.error_code = type(e).__name__  # Or a generic code like 'BackendError'
             # Log the basis/method even on failure
             result.basis_set = task.basis_set
             result.method = task.method
-            logger.critical(f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True)
+            logger.critical(
+                f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True
+            )
             # Wrap unexpected errors in PsiProgramCrashed or a new generic BackendError?
-            # Let's use PsiProgramCrashed for now, assuming it originates from Psi4 setup/interaction
-            raise PsiProgramCrashed(f"Unexpected backend error: {e}") from e
+            # Let's use PsiProgramCrashed for now, assuming it originates from
+            # Psi4 setup/interaction
+            error_msg = f"Unexpected backend error: {e}"
+            raise PsiProgramCrashed(error_msg) from e
         finally:
             # Ensure Psi4 output file is closed/cleaned if necessary
             # psi4.core.clean() # Maybe too aggressive? Cleans everything.

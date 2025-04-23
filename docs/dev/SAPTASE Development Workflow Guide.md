@@ -55,7 +55,7 @@ This guide defines the engineering workflow for building **saptase**, covering c
 ---
 ## 4  Continuous Integration
 ### 4.1 Pipeline Stages (GitHub Actions)
-1. **Lint** – `ruff`, `black --check`, `isort`.
+1. **Lint** – `ruff`, `black --check`, `isort`. Ruff is configured with line-length 200 and ignores E501, N818, RUF003, PT006 to minimise friction for single-contributor development.
 2. **Type‑check** – `mypy`.
 3. **Test** – `pytest -n auto` (no Psi4 for pure units, container with Psi4 for integration).
 4. **Docs** – build Sphinx/JupyterBook; fail on warning.

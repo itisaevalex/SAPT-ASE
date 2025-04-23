@@ -4,10 +4,11 @@ Command-line interface for the SAPTASE workflow manager.
 """
 
 import argparse
-import sys
 import json
-import numpy as np # Needed for Molecule coordinates
+import sys
 from typing import List, Optional
+
+import numpy as np  # Needed for Molecule coordinates
 
 # Import necessary components
 from .core.interop.yaml import load_config
@@ -22,7 +23,9 @@ def _create_molecule(mol_data: dict) -> Molecule:
     # Convert coordinates to numpy array
     coords = np.array(mol_data["coordinates"], dtype=float)
     if coords.ndim != 2 or coords.shape[1] != 3:
-         raise ValueError(f"Coordinates must be a list of [x, y, z] lists/tuples. Got shape {coords.shape}")
+        raise ValueError(
+            f"Coordinates must be a list of [x, y, z] lists/tuples. Got shape {coords.shape}"
+        )
     return Molecule(symbols=mol_data["symbols"], coordinates=coords)
 
 
@@ -41,7 +44,7 @@ def run_adaptive_command(args: argparse.Namespace):
     # Extract options
     adaptive_options = config.get("adaptive", {})
     backend_config = config.get("backend", {})
-    backend_name = backend_config.get("name", "psi4") # Default to psi4
+    backend_name = backend_config.get("name", "psi4")  # Default to psi4
     backend_options = backend_config.get("options", {})
 
     print(f"Using backend: {backend_name}")
@@ -52,10 +55,14 @@ def run_adaptive_command(args: argparse.Namespace):
         print("Error: No 'tasks' defined in the configuration file.", file=sys.stderr)
         sys.exit(1)
     if len(config_tasks) > 1:
-        print("Warning: Multiple tasks found in config. Adaptive mode currently uses only the first task.", file=sys.stderr)
+        print(
+            "Warning: Multiple tasks found in config. "
+            "Adaptive mode currently uses only the first task.",
+            file=sys.stderr,
+        )
 
     task_config = config_tasks[0]
-    task_id = task_config.get("task_id", "adaptive_task_1") # Default task ID
+    task_id = task_config.get("task_id", "adaptive_task_1")  # Default task ID
     dimer_config = task_config.get("dimer", {})
 
     try:
@@ -71,9 +78,9 @@ def run_adaptive_command(args: argparse.Namespace):
         # Combine monomers into a Dimer object - Assuming SaptTask takes monomers
         monomer_a=monomer_a,
         monomer_b=monomer_b,
-        basis=task_config.get("basis"), # Can be None, workflow handles default
-        method=task_config.get("method", "sapt0"), # Default method
-        psi4_keywords=task_config.get("psi4_keywords", {})
+        basis=task_config.get("basis"),  # Can be None, workflow handles default
+        method=task_config.get("method", "sapt0"),  # Default method
+        psi4_keywords=task_config.get("psi4_keywords", {}),
     )
 
     print(f"Prepared task '{sapt_task.id}' for adaptive workflow.")
@@ -81,16 +88,16 @@ def run_adaptive_command(args: argparse.Namespace):
     # Call the adaptive workflow runner
     try:
         adaptive_results = run_adaptive_workflow(
-            tasks=[sapt_task], # Pass as a list
+            tasks=[sapt_task],  # Pass as a list
             backend_name=backend_name,
             backend_options=backend_options,
             adaptive_options=adaptive_options,
-            max_workers=args.max_workers
+            max_workers=args.max_workers,
         )
     except Exception as e:
-         print(f"\nError during adaptive workflow execution: {e}", file=sys.stderr)
-         # Potentially print more traceback info here if needed
-         sys.exit(1)
+        print(f"\nError during adaptive workflow execution: {e}", file=sys.stderr)
+        # Potentially print more traceback info here if needed
+        sys.exit(1)
 
     # Print results
     print("\n--- Adaptive Workflow Results ---")
@@ -101,20 +108,20 @@ def run_adaptive_command(args: argparse.Namespace):
         for result_key, result in adaptive_results.items():
             print(f"\nResult for '{result_key}':")
             if result.success:
-                 print("  Status: Success")
-                 # Print final basis, rung, convergence status if available
-                 final_basis = result.metadata.get('converged_basis', 'N/A')
-                 final_rung = result.metadata.get('final_rung', 'N/A')
-                 converged = result.metadata.get('convergence_achieved', 'N/A')
-                 print(f"  Final Basis: {final_basis} (Rung {final_rung})")
-                 print(f"  Convergence Achieved: {converged}")
-                 print("  Energies (kcal/mol):")
-                 # Pretty print energies dict
-                 energies_str = json.dumps(result.energies, indent=4)
-                 print(energies_str)
+                print("  Status: Success")
+                # Print final basis, rung, convergence status if available
+                final_basis = result.metadata.get("converged_basis", "N/A")
+                final_rung = result.metadata.get("final_rung", "N/A")
+                converged = result.metadata.get("convergence_achieved", "N/A")
+                print(f"  Final Basis: {final_basis} (Rung {final_rung})")
+                print(f"  Convergence Achieved: {converged}")
+                print("  Energies (kcal/mol):")
+                # Pretty print energies dict
+                energies_str = json.dumps(result.energies, indent=4)
+                print(energies_str)
             else:
-                 print("  Status: Failed")
-                 print(f"  Error: {result.error_message}")
+                print("  Status: Failed")
+                print(f"  Error: {result.error_message}")
 
     print("\nAdaptive workflow execution finished.")
 

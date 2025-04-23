@@ -1,38 +1,26 @@
 # tests/test_recovery.py
 """Tests for the error recovery and escalation logic."""
 
-import pytest
-from saptase.core.models import Molecule, SaptTask, TaskStatus
-from saptase.core.errors import BasisIncompatible, MemoryExceeded, ScfFailed, SaptError
-from saptase.recovery.escalate import EscalationContext, LADDER
-from saptase.recovery.strategies import (
-    recover_basis_incompatible,
-    recover_scf_failed_simple,
-    recover_memory_exceeded,
-    # Import others as needed
-)
 import copy
+
+import pytest
+from saptase.core.errors import BasisIncompatible, MemoryExceeded, ScfFailed
+from saptase.core.models import Molecule, SaptTask
+from saptase.recovery.escalate import LADDER, EscalationContext
+
 
 # Fixture for a standard SaptTask
 @pytest.fixture
 def sample_task():
     """Provides a sample SaptTask for testing recovery."""
     # Use a basis that has a predecessor in the default ladder
-    basis_set = "aug-cc-pvdz" # Predecessor is jun-cc-pvdz
-    mol_a = Molecule(
-        name="mol_a",
-        symbols=["H"],
-        coordinates=[[0.0, 0.0, 0.0]]
-    )
-    mol_b = Molecule(
-        name="mol_b",
-        symbols=["He"],
-        coordinates=[[0.0, 0.0, 2.0]]
-    )
+    basis_set = "aug-cc-pvdz"  # Predecessor is jun-cc-pvdz
+    mol_a = Molecule(name="mol_a", symbols=["H"], coordinates=[[0.0, 0.0, 0.0]])
+    mol_b = Molecule(name="mol_b", symbols=["He"], coordinates=[[0.0, 0.0, 2.0]])
     # Setup initial keywords for testing modifications later
     initial_keywords = {
         "d_convergence": 1e-7,
-        "e_convergence": 1e-7, # Include e_convergence as strategy modifies it
+        "e_convergence": 1e-7,  # Include e_convergence as strategy modifies it
         "maxiter": 50,
         "memory": "10 GB",
     }
@@ -42,25 +30,29 @@ def sample_task():
         monomer_b=mol_b,
         basis_set=basis_set,
         method="sapt0",
-        additional_keywords=copy.deepcopy(initial_keywords), # Use deepcopy
+        additional_keywords=copy.deepcopy(initial_keywords),  # Use deepcopy
     )
 
+
 # --- EscalationContext Tests --- #
+
 
 def test_escalation_context_init(sample_task):
     """Test basic initialization of EscalationContext."""
     context = EscalationContext(sample_task)
     assert context.original_task == sample_task
     assert context.attempt_count == 0
-    assert context.max_attempts == len(LADDER) # Max attempts based on ladder length
+    assert context.max_attempts == len(LADDER)  # Max attempts based on ladder length
     assert context.last_error is None
     assert not context.history
+
 
 def test_escalation_context_can_retry_initial(sample_task):
     """Test can_retry before any attempts."""
     context = EscalationContext(sample_task)
     # Initially, can retry as no attempts made
     assert context.can_retry(BasisIncompatible("Test")) is True
+
 
 def test_escalation_context_apply_basis_incompatible(sample_task):
     """Test applying the basis incompatibility recovery strategy."""
@@ -75,10 +67,13 @@ def test_escalation_context_apply_basis_incompatible(sample_task):
     assert modified_task.id == "test_task_01_retry_1"
     # Expect basis to step down from aug-cc-pvdz to jun-cc-pvdz
     assert modified_task.basis_set == "jun-cc-pvdz"
-    assert modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    assert (
+        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    )
     assert len(context.history) == 1
     assert context.history[0]["strategy_name"] == "recover_basis_incompatible"
     assert context.history[0]["error_type"] == "BasisIncompatible"
+
 
 def test_escalation_context_apply_scf_failed(sample_task):
     """Test applying the SCF failure recovery strategy.
@@ -96,13 +91,18 @@ def test_escalation_context_apply_scf_failed(sample_task):
 
     assert context.attempt_count == 1
     assert context.last_error == error
-    assert modified_task.id == "test_task_01_retry_1" # Check correct ID
+    assert modified_task.id == "test_task_01_retry_1"  # Check correct ID
     # On 1st attempt, LADDER[0] (recover_basis_incompatible) should run
-    assert modified_task.basis_set == "jun-cc-pvdz" # Basis should change
-    assert modified_task.additional_keywords.get("d_convergence") == initial_d_conv # SCF keywords untouched
+    assert modified_task.basis_set == "jun-cc-pvdz"  # Basis should change
+    assert (
+        modified_task.additional_keywords.get("d_convergence") == initial_d_conv
+    )  # SCF keywords untouched
     assert modified_task.additional_keywords.get("maxiter") == initial_maxiter
-    assert modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    assert (
+        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    )
     assert len(context.history) == 1
+
 
 def test_escalation_context_apply_memory_exceeded(sample_task):
     """Test applying the memory exceeded recovery strategy.
@@ -120,16 +120,19 @@ def test_escalation_context_apply_memory_exceeded(sample_task):
     assert context.last_error == error
     assert modified_task.id == "test_task_01_retry_1"
     # On 1st attempt, LADDER[0] (recover_basis_incompatible) should run
-    assert modified_task.basis_set == "jun-cc-pvdz" # Basis should change
-    assert modified_task.additional_keywords.get("memory") == initial_memory # Memory untouched
-    assert modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    assert modified_task.basis_set == "jun-cc-pvdz"  # Basis should change
+    assert modified_task.additional_keywords.get("memory") == initial_memory  # Memory untouched
+    assert (
+        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    )
     assert len(context.history) == 1
+
 
 def test_escalation_context_max_retries(sample_task):
     """Test that can_retry returns False after max attempts."""
     # Use a non-modifying error/strategy for simplicity if needed, or accept changes
     context = EscalationContext(sample_task)
-    error = ScfFailed("SCF keeps failing repeatedly") # Use any applicable error
+    error = ScfFailed("SCF keeps failing repeatedly")  # Use any applicable error
 
     # Simulate reaching max attempts
     for i in range(context.max_attempts):
@@ -138,8 +141,8 @@ def test_escalation_context_max_retries(sample_task):
         # Use the error relevant to the *first* strategy in the ladder if applicable
         # For simplicity, we'll use the same error, assuming it persists.
         # A more complex test could alternate errors.
-        applied_error = context.last_error or error # Use last error if available, else the new one
-        _ = context.apply() # Apply strategy based on *last_error* set by can_retry
+        # Use the context.apply() method to apply the recovery strategy
+        _ = context.apply(error)  # Apply strategy based on error
 
     # After max_attempts, can_retry should be False
     assert context.can_retry(error) is False, "Should not be able to retry after max attempts"
@@ -147,7 +150,9 @@ def test_escalation_context_max_retries(sample_task):
     # Check history length matches max attempts
     assert len(context.history) == context.max_attempts
 
+
 # --- Tests for specific ladder steps --- #
+
 
 def test_escalation_context_apply_second_attempt_scf(sample_task):
     """Test that the second strategy (SCF relax) is applied on attempt 2."""
@@ -159,17 +164,17 @@ def test_escalation_context_apply_second_attempt_scf(sample_task):
 
     # --- Attempt 1 (Basis) --- #
     error1 = BasisIncompatible("First error")
-    assert context.can_retry(error1) is True # Sets last_error
+    assert context.can_retry(error1) is True  # Sets last_error
     task_retry1 = context.apply()
     assert context.attempt_count == 1
-    assert task_retry1.basis_set == "jun-cc-pvdz" # Basis changed in returned task
+    assert task_retry1.basis_set == "jun-cc-pvdz"  # Basis changed in returned task
     assert task_retry1.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
 
     # --- Attempt 2 (SCF) --- #
     error2 = ScfFailed("Second error")
     # EscalationContext internally uses original_task for the deepcopy when applying.
     # We test that the correct strategy (LADDER[1]) is selected and applied to original_task.
-    assert context.can_retry(error2) is True # Sets last_error to error2
+    assert context.can_retry(error2) is True  # Sets last_error to error2
     task_retry2 = context.apply()
     assert context.attempt_count == 2
     assert context.last_error == error2
@@ -206,15 +211,17 @@ def test_escalation_context_apply_third_attempt_memory(sample_task):
 
     # --- Attempt 3 (Memory) --- #
     error3 = MemoryExceeded("Third error")
-    assert context.can_retry(error3) is True # Sets last_error to error3
+    assert context.can_retry(error3) is True  # Sets last_error to error3
     task_retry3 = context.apply()
     assert context.attempt_count == 3
     assert context.last_error == error3
 
     # Check Memory strategy was applied (LADDER[2]) vs original task keywords
     assert "GB" in task_retry3.additional_keywords.get("memory", "")
-    assert float(task_retry3.additional_keywords["memory"].split()[0]) < initial_memory_val # Reduced
-    expected_memory = initial_memory_val * 0.8 # Strategy reduces by 20%
+    assert (
+        float(task_retry3.additional_keywords["memory"].split()[0]) < initial_memory_val
+    )  # Reduced
+    expected_memory = initial_memory_val * 0.8  # Strategy reduces by 20%
     assert abs(float(task_retry3.additional_keywords["memory"].split()[0]) - expected_memory) < 1e-9
     assert task_retry3.additional_keywords.get("recovery_strategy") == "recover_memory_exceeded"
     # Check basis and SCF keywords remain from original task (due to deepcopy in apply)

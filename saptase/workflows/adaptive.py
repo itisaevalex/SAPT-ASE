@@ -3,24 +3,23 @@
 Implements the adaptive basis set escalation workflow.
 """
 
-import copy
-import math
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from saptase.core.backend import get_backend # Import the factory
+from saptase.core.backend import get_backend  # Import the factory
 from saptase.core.basis import BASIS_LADDER, get_basis_rung, get_next_basis
-from saptase.core.models import SaptResult, SaptTask, TaskStatus
+from saptase.core.models import SaptResult, SaptTask
 from saptase.core.orchestrator import SaptWorkflow
 from saptase.core.utils.misc import format_energy_delta
 
 if TYPE_CHECKING:
     # Import the mock backend only for type checking to avoid circular dependencies
     # and keep test-related code out of the main logic's runtime imports.
-    from tests.test_adaptive import MockAdaptiveBackend
+    pass
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
 
 class AdaptiveWorkflow(SaptWorkflow):
     """
@@ -55,7 +54,7 @@ class AdaptiveWorkflow(SaptWorkflow):
             backend_instance = get_backend(backend_name, options=backend_options)
         except ValueError as e:
             logger.error(f"Failed to initialize backend '{backend_name}': {e}")
-            raise # Re-raise the error to halt execution
+            raise  # Re-raise the error to halt execution
 
         # 2. Initialize the base class correctly using keyword arguments
         super().__init__(tasks=tasks, backend=backend_instance)
@@ -64,21 +63,17 @@ class AdaptiveWorkflow(SaptWorkflow):
         self.adaptive_options = adaptive_options
         self.target_accuracy = self.adaptive_options.get("target_accuracy", {})
         # Default max_rung is the top of the ladder
-        self.max_rung = self.adaptive_options.get(
-            "max_rung", len(BASIS_LADDER) - 1
-        )
-        self.results_by_rung: Dict[int, SaptResult] = {} # Store results per rung
+        self.max_rung = self.adaptive_options.get("max_rung", len(BASIS_LADDER) - 1)
+        self.results_by_rung: Dict[int, SaptResult] = {}  # Store results per rung
 
         if not self.target_accuracy:
-            logger.warning("No target accuracy specified for adaptive workflow.") 
+            logger.warning("No target accuracy specified for adaptive workflow.")
 
         if len(self.tasks) > 1:
             # For now, just use the first task for adaptive logic
-            logger.warning(
-                "Adaptive workflow currently handles only the first task provided."
-            )
-        self.primary_task_id = self.tasks[0].id if self.tasks else None # This should work now
-        self.primary_task_ref = self.tasks[0] if self.tasks else None # Keep reference
+            logger.warning("Adaptive workflow currently handles only the first task provided.")
+        self.primary_task_id = self.tasks[0].id if self.tasks else None  # This should work now
+        self.primary_task_ref = self.tasks[0] if self.tasks else None  # Keep reference
 
         # Determine starting rung based on the primary task's basis
         self.start_rung = get_basis_rung(self.primary_task_ref.basis_set)
@@ -110,12 +105,12 @@ class AdaptiveWorkflow(SaptWorkflow):
             A dictionary containing the final converged SaptResult mapped by task ID,
             or all results obtained if convergence is not reached or failure occurs.
         """
-        if not self.primary_task_ref: # Check the reference task object
+        if not self.primary_task_ref:  # Check the reference task object
             logger.error("Adaptive workflow started with no tasks.")
             return {}
 
         # Clear previous results specific to this run
-        self.results.clear() # Clear the main results dict from base class
+        self.results.clear()  # Clear the main results dict from base class
         self.results_by_rung.clear()
 
         # --- Main Adaptive Loop ---
@@ -126,7 +121,7 @@ class AdaptiveWorkflow(SaptWorkflow):
         self.results_by_rung: Dict[int, SaptResult] = {}
 
         # Use a copy of the primary task to avoid modifying it
-        current_task = deepcopy(self.primary_task_ref) # Use deepcopy
+        current_task = deepcopy(self.primary_task_ref)  # Use deepcopy
 
         while current_rung <= self.max_rung:
             current_basis = BASIS_LADDER[current_rung]
@@ -134,7 +129,9 @@ class AdaptiveWorkflow(SaptWorkflow):
             current_task.basis_set = current_basis
             # Generate unique task ID for this rung
             current_task.id = f"{self.primary_task_id}_rung{current_rung}"
-            logger.info(f"--- Running Rung {current_rung} ({current_basis}) --- Task ID: {current_task.id}")
+            logger.info(
+                f"--- Running Rung {current_rung} ({current_basis}) --- Task ID: {current_task.id}"
+            )
 
             # Execute calculation for the current rung
             # Use self.backend.calculate which handles single task execution
@@ -142,7 +139,7 @@ class AdaptiveWorkflow(SaptWorkflow):
             try:
                 # Check if using the mock backend for testing
                 # This avoids pickling issues with mock lambdas when using run_local_serial
-                if self.backend.__class__.__name__ == 'MockAdaptiveBackend':
+                if self.backend.__class__.__name__ == "MockAdaptiveBackend":
                     current_result = self.backend.calculate(current_task)
                     # Manually update the main results dict for consistency if needed later
                     self.results[current_task.id] = current_result
@@ -151,7 +148,7 @@ class AdaptiveWorkflow(SaptWorkflow):
                     original_tasks = self.tasks
                     self.tasks = [current_task]
                     # Use the base class method for real backends
-                    self.run_local_serial() # Run with the single task set above
+                    self.run_local_serial()  # Run with the single task set above
                     current_result = self.results.get(current_task.id)
                     # Restore original task list for the workflow instance
                     self.tasks = original_tasks
@@ -159,17 +156,19 @@ class AdaptiveWorkflow(SaptWorkflow):
                 logger.error(f"Exception during rung {current_rung} execution: {e}", exc_info=True)
                 # Create a failure result
                 current_result = SaptResult(
-                    task_id=current_task.id,
-                    success=False,
-                    error_message=f"Execution failed: {e}"
+                    task_id=current_task.id, success=False, error_message=f"Execution failed: {e}"
                 )
-                self.results[current_task.id] = current_result # Ensure failure is recorded
+                self.results[current_task.id] = current_result  # Ensure failure is recorded
 
             if not current_result:
-                 # This case should ideally not happen if execution completes
-                 logger.error(f"Result for task {current_task.id} not found after execution.")
-                 current_result = SaptResult(task_id=current_task.id, success=False, error_message="Result missing after execution")
-                 self.results[current_task.id] = current_result
+                # This case should ideally not happen if execution completes
+                logger.error(f"Result for task {current_task.id} not found after execution.")
+                current_result = SaptResult(
+                    task_id=current_task.id,
+                    success=False,
+                    error_message="Result missing after execution",
+                )
+                self.results[current_task.id] = current_result
 
             # Store result by rung index as well for convergence check
             self.results_by_rung[current_rung] = current_result
@@ -198,9 +197,9 @@ class AdaptiveWorkflow(SaptWorkflow):
                         f"Final Result Task ID: {current_result.task_id}"
                     )
                     final_converged_result = current_result
-                    break # Exit the loop upon convergence
+                    break  # Exit the loop upon convergence
                 else:
-                     logger.info(f"Not converged after rung {current_rung}.")
+                    logger.info(f"Not converged after rung {current_rung}.")
 
             # Get next basis
             # Use the helper function now
@@ -208,12 +207,12 @@ class AdaptiveWorkflow(SaptWorkflow):
             if next_basis is None:
                 # This case should ideally be caught by the while current_rung <= self.max_rung check,
                 # but double-check to prevent errors if BASIS_LADDER is somehow modified.
-                 logger.warning(f"Reached end of BASIS_LADDER after {current_basis}. Stopping.")
-                 break
+                logger.warning(f"Reached end of BASIS_LADDER after {current_basis}. Stopping.")
+                break
 
             # Update for the next iteration
             current_rung += 1
-            prev_result = current_result # Store for next comparison
+            prev_result = current_result  # Store for next comparison
 
         # --- End of Loop ---
 
@@ -246,7 +245,7 @@ class AdaptiveWorkflow(SaptWorkflow):
         """
         target_accuracy = self.adaptive_options.get("target_accuracy", {})
         if not target_accuracy:
-            return False, {} # Cannot converge without criteria
+            return False, {}  # Cannot converge without criteria
 
         # Internal mapping from target_accuracy keys to SaptResult.energies keys
         # Assumes SaptResult.energies uses simplified keys internally
@@ -286,7 +285,7 @@ class AdaptiveWorkflow(SaptWorkflow):
             if prev_val is None or curr_val is None:
                 reason = f"Energy value for '{internal_key}' missing in one or both rungs."
                 reasons[target_key] = reason
-                all_converged = False # Cannot converge if component is missing
+                all_converged = False  # Cannot converge if component is missing
                 logger.warning(f"Convergence check failed for {target_key}: {reason}")
                 continue
 
@@ -294,13 +293,9 @@ class AdaptiveWorkflow(SaptWorkflow):
             converged = delta <= tolerance
 
             if converged:
-                reasons[target_key] = format_energy_delta(
-                    delta, tolerance, converged, target_key
-                )
+                reasons[target_key] = format_energy_delta(delta, tolerance, converged, target_key)
             else:
-                reasons[target_key] = format_energy_delta(
-                    delta, tolerance, converged, target_key
-                )
-                all_converged = False # Set to False if any component fails
+                reasons[target_key] = format_energy_delta(delta, tolerance, converged, target_key)
+                all_converged = False  # Set to False if any component fails
 
         return all_converged, reasons

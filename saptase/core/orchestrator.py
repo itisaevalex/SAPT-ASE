@@ -5,62 +5,35 @@ This module contains the main workflow logic for SAPT calculations.
 
 # Imports for parallel execution
 import concurrent.futures
-import os
-import logging
-import time # For timing
-import uuid # For run IDs
-from pathlib import Path # Added Path
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
 import json
+import logging
+import os
+import time  # For timing
+import uuid  # For run IDs
+from dataclasses import dataclass, field
+from pathlib import Path  # Added Path
+from typing import Any, Dict, List, Optional
 
 from tqdm import tqdm
 
+from ..recovery.escalate import EscalationContext  # Import recovery context
 from .backend import Psi4Backend, SaptBackend
-from .models import Molecule, SaptResult, SaptTask, TaskStatus
 from .errors import SaptError  # Import base SaptError
-from ..recovery.escalate import EscalationContext # Import recovery context
-from .logdb import LogDb # Import LogDb
+from .logdb import LogDb  # Import LogDb
+from .models import Molecule, SaptResult, SaptTask, TaskStatus
 
 logger = logging.getLogger(__name__)
 
 
-class MockBackend(SaptBackend):
-    """Mock backend for testing without Psi4."""
-
-    def calculate(self, task: SaptTask) -> SaptResult:
-        """Mock calculation that returns a dummy result.
-
-        Args:
-            task: The SAPT calculation task to perform
-
-        Returns:
-            A dummy SaptResult
-        """
-        # Create a dummy result
-        result = SaptResult(task_id=task.id)
-        result.success = True
-        result.energies = {
-            "total": -0.007525,  # Approx water dimer energy
-            "electrostatics": -0.012345,
-            "exchange": 0.007890,
-            "induction": -0.001234,
-            "dispersion": -0.001836,
-        }
-        task.status = TaskStatus.COMPLETED
-        return result
-
-
 def get_default_backend() -> SaptBackend:
-    """Get the default backend based on available packages.
+    """Always instantiate the production backend.
+
+    Tests inject their own backend explicitly.
 
     Returns:
-        A SaptBackend instance (Psi4Backend if Psi4 is available, otherwise MockBackend)
+        A Psi4Backend instance
     """
-    try:
-        return Psi4Backend()
-    except ImportError:
-        return MockBackend()
+    return Psi4Backend()
 
 
 # Helper function for parallel execution (must be top-level for pickling)
@@ -72,10 +45,13 @@ def _configure_worker_logging():
         level=logging.DEBUG,
         format="%(asctime)s [%(levelname)8s] %(process)d %(name)s:%(lineno)d: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        force=True
+        force=True,
     )
 
-def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Path, run_id: str, max_attempts: int = 3) -> SaptResult:
+
+def _execute_task_for_parallel(
+    backend: SaptBackend, task: SaptTask, db_path: Path, run_id: str, max_attempts: int = 3
+) -> SaptResult:
     """Worker function to run a single task, handling retries.
 
     Args:
@@ -91,7 +67,7 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
     Raises:
         RuntimeError: If recovery fails after max attempts.
     """
-    _configure_worker_logging() # Configure logging for THIS process
+    _configure_worker_logging()  # Configure logging for THIS process
     # Get a logger specific to this worker function after configuration
     worker_logger = logging.getLogger(__name__ + ".worker")
 
@@ -103,19 +79,28 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
             status_value = task.status
             task.status = TaskStatus(status_value)
         except ValueError:
-             worker_logger.error(f"Task {task.id}: Received invalid initial status string '{task.status}'. Failing task.")
-             return SaptResult(task_id=task.id, success=False, error_message=f"Invalid initial status string '{task.status}' received by worker.", error_code="InvalidState")
+            worker_logger.error(
+                f"Task {task.id}: Received invalid initial status string '{task.status}'. Failing task."
+            )
+            return SaptResult(
+                task_id=task.id,
+                success=False,
+                error_message=f"Invalid initial status string '{task.status}' received by worker.",
+                error_code="InvalidState",
+            )
 
     if task.status not in [TaskStatus.PENDING, TaskStatus.RETRYING]:
-         worker_logger.warning(f"Task {task.id} received with non-runnable status {task.status}. Skipping execution.")
-         # Return a result reflecting this initial state
-         return SaptResult(
-             task_id=task.id, # Use original task ID
-             success=False,
-             error_message=f"Task received by worker with non-runnable status: {task.status}",
-             error_code="InvalidInitialState",
-             attempt_number=0 # No attempts made
-         )
+        worker_logger.warning(
+            f"Task {task.id} received with non-runnable status {task.status}. Skipping execution."
+        )
+        # Return a result reflecting this initial state
+        return SaptResult(
+            task_id=task.id,  # Use original task ID
+            success=False,
+            error_message=f"Task received by worker with non-runnable status: {task.status}",
+            error_code="InvalidInitialState",
+            attempt_number=0,  # No attempts made
+        )
 
     # If status is PENDING or RETRYING, proceed.
     worker_logger.info(f"Starting task {task.id} (initial status: {task.status})...")
@@ -127,73 +112,69 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
 
     # Initialize local LogDb for logging each attempt in the worker process
     from .logdb import LogDb
+
     logdb = LogDb(db_path)
 
     context = EscalationContext(task=task, max_attempts=max_attempts)
-    original_task_id = task.id # Store original ID for final logging
-    result = None # Initialize result variable
-    start_time = time.monotonic() # Track start time for the first attempt (used if unexpected error)
+    original_task_id = task.id  # Store original ID for final logging
+    result = None  # Initialize result variable
+    start_time = (
+        time.monotonic()
+    )  # Track start time for the first attempt (used if unexpected error)
 
     while True:
-        # --- Status Conversion (Needed for subsequent loop iterations after retry) ---
-        if isinstance(task.status, str):
-            try:
-                # Attempt to convert string back to TaskStatus member using its name
-                status_value = task.status # Store the string
-                task.status = TaskStatus[status_value] # Convert using Enum lookup by name
-                worker_logger.debug(f"Task {task.id}: Converted status string '{status_value}' back to Enum member {task.status}")
-            except KeyError:
-                 worker_logger.error(f"Task {task.id}: Received invalid status string '{status_value}' during retry loop. Failing task.") # Use status_value in log
-                 # Create a failure result indicating this specific error
-                 final_result = SaptResult(
-                     task_id=original_task_id, # Use original task ID
-                     success=False,
-                     error_message=f"Invalid status string '{status_value}' received during retry.",
-                     error_code="InvalidState"
-                 )
-                 result = final_result # Store final failure result
-                 break # Exit loop as state is invalid
+        # No need for string-to-Enum conversion as TaskStatus is now guaranteed to be an Enum
 
         # Log current status entering the loop
         worker_logger.debug(f"Task {task.id}: Entering loop. Status is now {task.status}")
 
-        worker_logger.info(f"Task {task.id}: Attempt {context.attempt_index + 1} with basis='{task.basis_set}' method='{task.method}'")
-        current_attempt_start_time = time.monotonic() # Time this specific attempt
+        worker_logger.info(
+            f"Task {task.id}: Attempt {context.attempt_index + 1} with basis='{task.basis_set}' method='{task.method}'"
+        )
+        current_attempt_start_time = time.monotonic()  # Time this specific attempt
 
         try:
             # --- Execute Calculation ---
-            task_result = backend.calculate(task) # Assume backend handles its own status logging if needed
+            task_result = backend.calculate(
+                task
+            )  # Assume backend handles its own status logging if needed
             elapsed_time = time.monotonic() - current_attempt_start_time
 
             # --- Process Success ---
             if task_result.success:
-                worker_logger.info(f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}.")
-                # For test compatibility: MockBackend expects first retry to have attempt_number=1
-                # The first retry is attempt_index=1, so we use the same index without the +1 adjustment
+                worker_logger.info(
+                    f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}."
+                )
+                # Use 0-based attempt numbering to be consistent with the recovery ladder
                 task_result.attempt_number = context.attempt_index
                 task_result.elapsed_time = elapsed_time
-                task_result.basis_set = task.basis_set # Ensure these are set from task state
+                task_result.basis_set = task.basis_set  # Ensure these are set from task state
                 task_result.method = task.method
-                
+
                 # Log this successful attempt to the database
-                logdb.log_task_attempt(
-                    run_id=run_id,
-                    result=task_result
-                )
-                
-                result = task_result # Store final success result
-                break # Exit the while loop on success
+                logdb.log_task_attempt(run_id=run_id, result=task_result)
+
+                result = task_result  # Store final success result
+                break  # Exit the while loop on success
 
             # Should not happen if backend.calculate follows contract (raises SaptError on fail)
             else:
-                 worker_logger.error(f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure.")
-                 # Synthesize an error to proceed with retry logic
-                 raise SaptError(task_result.error_message or "Backend indicated failure without specific error")
+                worker_logger.error(
+                    f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure."
+                )
+                # Synthesize an error to proceed with retry logic
+                raise SaptError(
+                    task_result.error_message or "Backend indicated failure without specific error"
+                )
 
         except SaptError as err:
-            worker_logger.warning(f"Task {task.id} failed on attempt {context.attempt_index + 1} with error: {err}")
-            elapsed_time = time.monotonic() - current_attempt_start_time # Time for this failed attempt
-            
+            worker_logger.warning(
+                f"Task {task.id} failed on attempt {context.attempt_index + 1} with error: {err}"
+            )
+            elapsed_time = (
+                time.monotonic() - current_attempt_start_time
+            )  # Time for this failed attempt
+
             # Create a failed result with enough information for logging
             failed_attempt_result = SaptResult(
                 task_id=task.id,
@@ -201,59 +182,66 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
                 error_message=str(err),
                 error_code=type(err).__name__,
                 basis_set=task.basis_set,
-                method=task.method
+                method=task.method,
             )
-            # In the test MockBackend, attempt_number is 0-based (first attempt = 0)
-            # But for logging and result reporting, we use 1-based (first attempt = 1)
-            # For test compatibility: Use the consistent attempt numbering scheme
-            # where attempt_number is same as attempt_index (not +1 adjusted)
+            # Use consistent 0-based attempt numbering throughout the codebase
             failed_attempt_result.attempt_number = context.attempt_index
             failed_attempt_result.elapsed_time = elapsed_time
-            
+
             # Log this failed attempt to the database
-            logdb.log_task_attempt(
-                run_id=run_id,
-                result=failed_attempt_result
-            )
+            logdb.log_task_attempt(run_id=run_id, result=failed_attempt_result)
 
             # Note: We don't need to call context.record_failure(err) separately anymore
             # since the refactored can_retry method now does this internally
             if context.can_retry(err):
                 try:
-                    retry_task = context.apply() # Attempt to get the next task
-                    worker_logger.info(f"Task {retry_task.id}: Applied recovery strategy for {type(err).__name__}. Retrying as task {retry_task.id}...")
-                    task = retry_task # Update task for the next iteration
+                    retry_task = context.apply(
+                        err
+                    )  # Attempt to get the next task with the current error
+                    worker_logger.info(
+                        f"Task {retry_task.id}: Applied recovery strategy for {type(err).__name__}. Retrying as task {retry_task.id}..."
+                    )
+                    task = retry_task  # Update task for the next iteration
                     # task.status is already set to RETRYING by copy_with_retry in context.apply
-                    continue # Go to next iteration to execute the retry_task
-                except RuntimeError as apply_err: # Catch error if apply() fails
-                    worker_logger.error(f"Task {task.id}: Recovery attempt failed during apply(): {apply_err}. Failing permanently.")
+                    continue  # Go to next iteration to execute the retry_task
+                except RuntimeError as apply_err:  # Catch error if apply() fails
+                    worker_logger.error(
+                        f"Task {task.id}: Recovery attempt failed during apply(): {apply_err}. Failing permanently."
+                    )
                     # Store info needed to create the final failure result below
                     final_err = apply_err
-                    final_error_code = type(err).__name__ # Use the SaptError that led to this point
+                    final_error_code = type(
+                        err
+                    ).__name__  # Use the SaptError that led to this point
             else:
-                 # If can_retry() is False, log it and prepare for final failure result
-                 worker_logger.warning(f"Task {task.id}: No further recovery possible after attempt {context.attempt_index + 1}.")
-                 final_err = err # Use the SaptError that triggered this failure
-                 final_error_code = type(err).__name__
+                # If can_retry() is False, log it and prepare for final failure result
+                worker_logger.warning(
+                    f"Task {task.id}: No further recovery possible after attempt {context.attempt_index + 1}."
+                )
+                final_err = err  # Use the SaptError that triggered this failure
+                final_error_code = type(err).__name__
 
             # --- If we reach here within the SaptError block, it means the task failed permanently ---
             # Construct failure result
             worker_logger.error(f"Task {original_task_id} failed permanently.")
             result = SaptResult(
-                task_id=task.id, # Use the current task ID (which is the retry ID for retry attempts)
+                task_id=task.id,  # Use the current task ID (which is the retry ID for retry attempts)
                 success=False,
                 error_message=f"Task failed permanently after {context.attempt_index + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
-                basis_set=task.basis_set, # basis/method from the last failed attempt state
+                basis_set=task.basis_set,  # basis/method from the last failed attempt state
                 method=task.method,
                 attempt_number=context.attempt_index + 1,
                 error_code=final_error_code,
-                error_details=json.dumps(context.history)
+                error_details=json.dumps(context.history),
             )
-            result.elapsed_time = elapsed_time # Use time from the last failed attempt
-            break # Exit the while loop as the task failed permanently
+            result.elapsed_time = elapsed_time  # Use time from the last failed attempt
+            break  # Exit the while loop as the task failed permanently
 
-        except Exception as base_exc: # Catch totally unexpected errors during calculation
-            worker_logger.error(f"Task {task.id} encountered unexpected error during execution: {base_exc}", exc_info=True)
+        except Exception as base_exc:  # Catch totally unexpected errors during calculation
+            worker_logger.error(
+                f"Task {task.id} encountered unexpected error during execution: {base_exc}",
+                exc_info=True,
+            )
             elapsed_time = time.monotonic() - current_attempt_start_time
             # Create a failure result for this unexpected error
             result = SaptResult(
@@ -264,35 +252,41 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
                 method=task.method,
                 attempt_number=context.attempt_index + 1,
                 error_code=type(base_exc).__name__,
-                error_details=json.dumps(context.history + [{"error": f"Unexpected: {base_exc}"}])
+                error_details=json.dumps([*context.history, {"error": f"Unexpected: {base_exc}"}]),
             )
             result.elapsed_time = elapsed_time
-            break # Exit loop on unexpected error
+            break  # Exit loop on unexpected error
 
     # --- Final Logging (outside loop, within worker) ---
     # Ensure result is defined before logging
     if result is None:
-         worker_logger.error(f"Internal error: _execute_task_for_parallel finished for task {original_task_id} without producing a result object.")
-         # Create a generic failure result if something went drastically wrong
-         result = SaptResult(
-             task_id=task.id,  # Use current task.id, not original_task_id
-             success=False,
-             error_message="Internal orchestrator error: No result produced.",
-             error_code="InternalOrchestratorError",
-             attempt_number=context.attempt_index + 1
+        worker_logger.error(
+            f"Internal error: _execute_task_for_parallel finished for task {original_task_id} without producing a result object."
         )
-         # Try to capture elapsed time if possible
-         if 'start_time' in locals():
-             result.elapsed_time = time.monotonic() - start_time
+        # Create a generic failure result if something went drastically wrong
+        result = SaptResult(
+            task_id=task.id,  # Use current task.id, not original_task_id
+            success=False,
+            error_message="Internal orchestrator error: No result produced.",
+            error_code="InternalOrchestratorError",
+            attempt_number=context.attempt_index + 1,
+        )
+        # Try to capture elapsed time if possible
+        if "start_time" in locals():
+            result.elapsed_time = time.monotonic() - start_time
 
     # Log before returning, but DO NOT interact with DB from worker
-    worker_logger.info(f"Task {original_task_id}: Worker finished. Returning result: Success={result.success}, ErrorCode={getattr(result, 'error_code', 'None')}")
-    worker_logger.debug(f"WORKER_LOGGING Task {task.id}: Returning result with attempt_number={getattr(result, 'attempt_number', 'None')}")
-    
+    worker_logger.info(
+        f"Task {original_task_id}: Worker finished. Returning result: Success={result.success}, ErrorCode={getattr(result, 'error_code', 'None')}"
+    )
+    worker_logger.debug(
+        f"WORKER_LOGGING Task {task.id}: Returning result with attempt_number={getattr(result, 'attempt_number', 'None')}"
+    )
+
     # Close the database connection before returning
     logdb.close()
-    
-    return result # Return the final SaptResult
+
+    return result  # Return the final SaptResult
 
 
 @dataclass
@@ -312,13 +306,13 @@ class SaptWorkflow:
     backend: SaptBackend = field(default_factory=get_default_backend)
     tasks: List[SaptTask] = field(default_factory=list)
     results: Dict[str, SaptResult] = field(default_factory=dict)
-    db_path: Path = field(default=Path("runs/runs.sqlite")) # Add db_path field
-    logdb: LogDb = field(init=False) # Add logdb field, not initialized directly
-    current_run_id: str = field(init=False) # Add current_run_id field
+    db_path: Path = field(default=Path("runs/runs.sqlite"))  # Add db_path field
+    logdb: LogDb = field(init=False)  # Add logdb field, not initialized directly
+    current_run_id: str = field(init=False)  # Add current_run_id field
 
     def __post_init__(self):
         """Initialize LogDb after the main init."""
-        self.logdb = LogDb(self.db_path) # Initialize LogDb here
+        self.logdb = LogDb(self.db_path)  # Initialize LogDb here
 
     def add_task(self, task: SaptTask) -> None:
         """Add a SAPT task to the workflow.
@@ -390,8 +384,8 @@ class SaptWorkflow:
             Dictionary mapping task IDs to results
         """
         # Generate a unique ID for this workflow run if not already set (allows re-runs? TBD)
-        if not hasattr(self, 'current_run_id') or not self.current_run_id:
-             self.current_run_id = f"run_{uuid.uuid4().hex[:8]}"
+        if not hasattr(self, "current_run_id") or not self.current_run_id:
+            self.current_run_id = f"run_{uuid.uuid4().hex[:8]}"
         logger.info(f"Starting workflow run_id: {self.current_run_id}")
 
         # Filter tasks that need to be run
@@ -401,9 +395,7 @@ class SaptWorkflow:
             print("No pending tasks to run.")
             return self.results
 
-        print(
-            f"Running {len(pending_tasks)} SAPT tasks on {max_workers} workers..."
-        )
+        print(f"Running {len(pending_tasks)} SAPT tasks on {max_workers} workers...")
 
         # Map original task ID to task object for logging details
         task_details = {task.id: task for task in self.tasks}
@@ -413,7 +405,13 @@ class SaptWorkflow:
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Map future to original task ID
             future_to_task_id = {
-                executor.submit(_execute_task_for_parallel, self.backend, task, self.logdb.db_path, self.current_run_id): task.id
+                executor.submit(
+                    _execute_task_for_parallel,
+                    self.backend,
+                    task,
+                    self.logdb.db_path,
+                    self.current_run_id,
+                ): task.id
                 for task in pending_tasks
             }
 
@@ -427,95 +425,102 @@ class SaptWorkflow:
                 try:
                     # Get the result from this specific future (one specific attempt)
                     result_from_future: SaptResult = future.result()
-                    
+
                     # Each attempt is already logged in the worker process
                     # We no longer need to log here in the main process
-                    
-                    logger.debug(f"Received result for task {result_from_future.task_id} (original: {original_task_id}), success={result_from_future.success}, attempt={getattr(result_from_future, 'attempt_number', 0)}")
-                    
-                    # Now determine if this result should become the final result for this original task
-                    # Get the current best result for this task, if any
-                    current_result = self.results.get(original_task_id)
-                    
-                    # Decide whether to update the final result:
-                    update_final_result = False
-                    
-                    if current_result is None:
-                        # No previous result, so use this one
-                        update_final_result = True
-                        logger.debug(f"No previous result for {original_task_id}, using result from attempt {getattr(result_from_future, 'attempt_number', 0)}")
 
-                    elif result_from_future.success and not current_result.success:
-                        # This attempt succeeded but previous failed - use the successful result
-                        update_final_result = True
-                        logger.debug(f"Updated result for {original_task_id}: new success overrides previous failure")
+                    logger.debug(
+                        f"Received result for task {result_from_future.task_id} (original: {original_task_id}), success={result_from_future.success}, attempt={getattr(result_from_future, 'attempt_number', 0)}"
+                    )
 
-                    elif not result_from_future.success and not current_result.success:
-                        # Both failed, use the one with higher attempt number (later in the sequence)
-                        current_attempt = getattr(current_result, 'attempt_number', 0)
-                        new_attempt = getattr(result_from_future, 'attempt_number', 0)
-                        
-                        if new_attempt > current_attempt:
-                            update_final_result = True
-                            logger.debug(f"Updated failed result for {original_task_id}: using attempt {new_attempt} instead of {current_attempt}")
-                    
-                    # If it's a success but we already have a success, keep the existing one
-                    # (first success is the one we want)
-                    elif result_from_future.success and current_result.success:
-                        current_attempt = getattr(current_result, 'attempt_number', 0)
-                        new_attempt = getattr(result_from_future, 'attempt_number', 0)
-                        logger.debug(f"Keeping existing success for {original_task_id} (attempt {current_attempt}), ignoring later success from attempt {new_attempt}")
-                    
+                    # Determine if this result should become the final result using compact rules
+                    existing = self.results.get(original_task_id)
+                    replace = (
+                        existing is None
+                        or (result_from_future.success and not existing.success)
+                        or (
+                            not result_from_future.success
+                            and not existing.success
+                            and result_from_future.attempt_number > existing.attempt_number
+                        )
+                    )
+
+                    # Log what happened
+                    if existing is None:
+                        logger.debug(
+                            f"No previous result for {original_task_id}, using result from attempt {result_from_future.attempt_number}"
+                        )
+                    elif replace and result_from_future.success:
+                        logger.debug(
+                            f"Updated result for {original_task_id}: new success overrides previous failure"
+                        )
+                    elif replace and not result_from_future.success:
+                        logger.debug(
+                            f"Updated failed result for {original_task_id}: using attempt {result_from_future.attempt_number} instead of {existing.attempt_number}"
+                        )
+                    elif result_from_future.success and existing.success:
+                        logger.debug(
+                            f"Keeping existing success for {original_task_id} (attempt {existing.attempt_number}), ignoring later success from attempt {result_from_future.attempt_number}"
+                        )
+
                     # Update the final result if needed
-                    if update_final_result:
+                    if replace:
                         # Store in results dictionary with original task ID as key
                         self.results[original_task_id] = result_from_future
                         results_list.append(result_from_future)
-                        
+
                         # Update the original task status based on the final result
                         if original_task:
-                            original_task.status = TaskStatus.COMPLETED if result_from_future.success else TaskStatus.FAILED
-                        
+                            original_task.status = (
+                                TaskStatus.COMPLETED
+                                if result_from_future.success
+                                else TaskStatus.FAILED
+                            )
+
                         # Log the state update
                         log_msg = f"Task {original_task_id}: final result updated to {result_from_future.task_id}, success={result_from_future.success}"
-                        if hasattr(result_from_future, 'attempt_number'):
+                        if hasattr(result_from_future, "attempt_number"):
                             log_msg += f" (attempt {result_from_future.attempt_number})"
                         logger.info(log_msg)
-                    
+
                 except Exception as exc:  # Catch rare errors during future.result() retrieval
-                    logger.critical(f"Future for task {original_task_id} raised unexpected exception during result retrieval: {exc}", exc_info=True)
-                    
+                    logger.critical(
+                        f"Future for task {original_task_id} raised unexpected exception during result retrieval: {exc}",
+                        exc_info=True,
+                    )
+
                     # Create a generic failure result for this error
                     fail_result = SaptResult(
                         task_id=original_task_id,
                         success=False,
                         error_message=f"Exception during future.result(): {exc}",
                         energies=None,  # No energies calculated
-                        raw_output=f"Error during result retrieval: {exc}"
+                        raw_output=f"Error during result retrieval: {exc}",
                     )
                     fail_result.elapsed_time = -1.0  # Indicate unknown task time
                     fail_result.attempt_number = 0  # Set default attempt number
                     fail_result.error_code = "FutureRetrievalException"
-                    fail_result.error_details = json.dumps([{'error': f"Exception during future.result(): {exc}"}])
-                    
+                    fail_result.error_details = json.dumps(
+                        [{"error": f"Exception during future.result(): {exc}"}]
+                    )
+
                     # Exception during future.result() means the worker didn't complete
                     # We need to log this special case here in the main process
-                    self.logdb.log_task_attempt(
-                        run_id=self.current_run_id,
-                        result=fail_result
-                    )
-                    
+                    self.logdb.log_task_attempt(run_id=self.current_run_id, result=fail_result)
+
                     # Only update the final result if no previous result exists
                     if original_task_id not in self.results:
                         self.results[original_task_id] = fail_result
                         results_list.append(fail_result)
-                        
+
                         if original_task:
                             original_task.status = TaskStatus.FAILED
 
         self.logdb.close()
 
-        logger.info(f"Parallel execution for run_id {self.current_run_id} finished. Processed {len(results_list)} tasks.")
+        logger.info(
+            f"Parallel execution for run_id {self.current_run_id} finished. Processed {len(results_list)} tasks."
+        )
         return self.results
 
     def get_result(self, task_id: str) -> Optional[SaptResult]:

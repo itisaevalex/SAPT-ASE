@@ -1,23 +1,25 @@
 """Core data models for SAPTASE."""
 
+import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
-import logging
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
-from copy import deepcopy
 
 logger = logging.getLogger(__name__)
+
 
 class TaskStatus(Enum):
     """Status of a SAPT calculation task."""
 
-    PENDING = auto()    # Waiting to be run
-    RUNNING = auto()    # Currently executing
-    RETRYING = auto()   # Failed, but scheduled for a retry attempt
+    PENDING = auto()  # Waiting to be run
+    RUNNING = auto()  # Currently executing
+    RETRYING = auto()  # Failed, but scheduled for a retry attempt
     COMPLETED = auto()  # Finished successfully
-    FAILED = auto()     # Finished unsuccessfully after all attempts
+    FAILED = auto()  # Finished unsuccessfully after all attempts
 
 
 @dataclass
@@ -139,13 +141,17 @@ class SaptTask:
             b_name = self.monomer_b.name or f"{len(self.monomer_b.symbols)}atoms"
             self.id = f"{a_name}_{b_name}_{self.method}"
 
-    def copy_with_retry(self, new_id_suffix: str, modified_args: Dict[str, Any], status: TaskStatus) -> 'SaptTask':
+    def copy_with_retry(
+        self, new_id_suffix: str, modified_args: Dict[str, Any], status: TaskStatus
+    ) -> "SaptTask":
         """Creates a copy of the task for a retry attempt."""
         new_task = deepcopy(self)
         new_task.id = f"{self.id}{new_id_suffix}"
         new_task.additional_keywords = {**self.additional_keywords, **modified_args}
-        logger.debug(f"Task {new_task.id}: Setting status in copy_with_retry. Type: {type(status)}, Value: {repr(status)}")
-        new_task.status = status # This should be assigning the TaskStatus enum member
+        logger.debug(
+            f"Task {new_task.id}: Setting status in copy_with_retry. Type: {type(status)}, Value: {status!r}"
+        )
+        new_task.status = status  # This should be assigning the TaskStatus enum member
         # Reset any state specific to a previous run? Maybe not needed.
         return new_task
 

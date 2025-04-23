@@ -28,7 +28,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
     yaml = YAML(typ="safe")  # Use safe loader
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_data = yaml.load(f)
         if not isinstance(config_data, dict):
             # Ensure the top level is a dictionary

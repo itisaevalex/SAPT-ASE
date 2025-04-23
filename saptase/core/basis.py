@@ -4,7 +4,7 @@ This module contains utilities for managing basis sets in SAPT calculations.
 For the MVP, this is a minimal implementation with just the fixed jun-cc-pVDZ basis.
 """
 
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 # Default basis set for MVP
 DEFAULT_BASIS = "jun-cc-pvdz"
@@ -107,7 +107,7 @@ def get_previous_basis(basis_set_name: str) -> Optional[str]:
     """
     current_rung = get_basis_rung(basis_set_name)
     if current_rung is None or current_rung == 0:
-        return None # Not found or already at the smallest
+        return None  # Not found or already at the smallest
     return BASIS_LADDER[current_rung - 1]
 
 
