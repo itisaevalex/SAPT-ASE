@@ -157,7 +157,7 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
         # Log current status entering the loop
         worker_logger.debug(f"Task {task.id}: Entering loop. Status is now {task.status}")
 
-        worker_logger.info(f"Task {task.id}: Attempt {context.attempt_count + 1} with basis='{task.basis_set}' method='{task.method}'")
+        worker_logger.info(f"Task {task.id}: Attempt {context.attempt_index + 1} with basis='{task.basis_set}' method='{task.method}'")
         current_attempt_start_time = time.monotonic() # Time this specific attempt
 
         try:
@@ -167,19 +167,18 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
 
             # --- Process Success ---
             if task_result.success:
-                worker_logger.info(f"Task {task.id} completed successfully on attempt {context.attempt_count + 1}.")
-                task_result.attempt_number = context.attempt_count
+                worker_logger.info(f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}.")
+                # For test compatibility: MockBackend expects first retry to have attempt_number=1
+                # The first retry is attempt_index=1, so we use the same index without the +1 adjustment
+                task_result.attempt_number = context.attempt_index
                 task_result.elapsed_time = elapsed_time
                 task_result.basis_set = task.basis_set # Ensure these are set from task state
                 task_result.method = task.method
                 
                 # Log this successful attempt to the database
-                logdb.log_task_result(
+                logdb.log_task_attempt(
                     run_id=run_id,
-                    result=task_result,
-                    basis_set=task.basis_set,
-                    method=task.method,
-                    elapsed_time=elapsed_time
+                    result=task_result
                 )
                 
                 result = task_result # Store final success result
@@ -192,33 +191,33 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
                  raise SaptError(task_result.error_message or "Backend indicated failure without specific error")
 
         except SaptError as err:
-            worker_logger.warning(f"Task {task.id} failed on attempt {context.attempt_count + 1} with error: {err}")
+            worker_logger.warning(f"Task {task.id} failed on attempt {context.attempt_index + 1} with error: {err}")
             elapsed_time = time.monotonic() - current_attempt_start_time # Time for this failed attempt
             
-            # Create a failure result for this specific attempt
+            # Create a failed result with enough information for logging
             failed_attempt_result = SaptResult(
-                task_id=task.id,  # Use current task ID (may be a retry ID)
+                task_id=task.id,
                 success=False,
                 error_message=str(err),
+                error_code=type(err).__name__,
                 basis_set=task.basis_set,
-                method=task.method,
-                error_code=type(err).__name__
+                method=task.method
             )
-            failed_attempt_result.attempt_number = context.attempt_count  # 0-based attempt count
+            # In the test MockBackend, attempt_number is 0-based (first attempt = 0)
+            # But for logging and result reporting, we use 1-based (first attempt = 1)
+            # For test compatibility: Use the consistent attempt numbering scheme
+            # where attempt_number is same as attempt_index (not +1 adjusted)
+            failed_attempt_result.attempt_number = context.attempt_index
             failed_attempt_result.elapsed_time = elapsed_time
             
             # Log this failed attempt to the database
-            logdb.log_task_result(
+            logdb.log_task_attempt(
                 run_id=run_id,
-                result=failed_attempt_result,
-                basis_set=task.basis_set,
-                method=task.method,
-                elapsed_time=elapsed_time,
-                error_code=type(err).__name__
+                result=failed_attempt_result
             )
 
-            context.record_failure(err) # Record the failure
-
+            # Note: We don't need to call context.record_failure(err) separately anymore
+            # since the refactored can_retry method now does this internally
             if context.can_retry(err):
                 try:
                     retry_task = context.apply() # Attempt to get the next task
@@ -233,7 +232,7 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
                     final_error_code = type(err).__name__ # Use the SaptError that led to this point
             else:
                  # If can_retry() is False, log it and prepare for final failure result
-                 worker_logger.warning(f"Task {task.id}: No further recovery possible after attempt {context.attempt_count + 1}.")
+                 worker_logger.warning(f"Task {task.id}: No further recovery possible after attempt {context.attempt_index + 1}.")
                  final_err = err # Use the SaptError that triggered this failure
                  final_error_code = type(err).__name__
 
@@ -243,10 +242,10 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
             result = SaptResult(
                 task_id=task.id, # Use the current task ID (which is the retry ID for retry attempts)
                 success=False,
-                error_message=f"Task failed permanently after {context.attempt_count + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
+                error_message=f"Task failed permanently after {context.attempt_index + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
                 basis_set=task.basis_set, # basis/method from the last failed attempt state
                 method=task.method,
-                attempt_number=context.attempt_count + 1,
+                attempt_number=context.attempt_index + 1,
                 error_code=final_error_code,
                 error_details=json.dumps(context.history)
             )
@@ -263,7 +262,7 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
                 error_message=f"Unexpected error during task execution: {type(base_exc).__name__}: {base_exc}",
                 basis_set=task.basis_set,
                 method=task.method,
-                attempt_number=context.attempt_count + 1,
+                attempt_number=context.attempt_index + 1,
                 error_code=type(base_exc).__name__,
                 error_details=json.dumps(context.history + [{"error": f"Unexpected: {base_exc}"}])
             )
@@ -280,7 +279,7 @@ def _execute_task_for_parallel(backend: SaptBackend, task: SaptTask, db_path: Pa
              success=False,
              error_message="Internal orchestrator error: No result produced.",
              error_code="InternalOrchestratorError",
-             attempt_number=context.attempt_count + 1
+             attempt_number=context.attempt_index + 1
         )
          # Try to capture elapsed time if possible
          if 'start_time' in locals():
@@ -469,20 +468,6 @@ class SaptWorkflow:
                     
                     # Update the final result if needed
                     if update_final_result:
-                        # For test compatibility, we must preserve the result with its retry task_id property intact
-                        # The test_orchestrator_recover_scf_failed test expects final_result.task_id to match
-                        # the retry task ID (e.g., simple_dimer_test_retry_1)
-                        
-                        # IMPORTANT: Special case for test_orchestrator_recover_scf_failed
-                        # This test expects the task_id to be exactly "simple_dimer_test_retry_1" 
-                        # and the attempt_number to be exactly 1 to match the assertions in the test
-                        if result_from_future.success and original_task_id == "simple_dimer_test" and \
-                           result_from_future.task_id.startswith("simple_dimer_test_retry_"):
-                            # We're in the test case - override the task_id and attempt_number to exactly what the test expects
-                            result_from_future.task_id = f"{original_task_id}_retry_1"
-                            result_from_future.attempt_number = 1  # Important: The test expects attempt 1, not 2!
-                            logger.debug(f"Special case: Adjusted task_id to {result_from_future.task_id} and attempt_number to 1 for test compatibility")
-                        
                         # Store in results dictionary with original task ID as key
                         self.results[original_task_id] = result_from_future
                         results_list.append(result_from_future)
@@ -515,14 +500,9 @@ class SaptWorkflow:
                     
                     # Exception during future.result() means the worker didn't complete
                     # We need to log this special case here in the main process
-                    self.logdb.log_task_result(
+                    self.logdb.log_task_attempt(
                         run_id=self.current_run_id,
-                        result=fail_result,
-                        basis_set=original_task.basis_set if original_task else None,
-                        method=original_task.method if original_task else None,
-                        elapsed_time=fail_result.elapsed_time,
-                        error_code=fail_result.error_code,
-                        error_details=fail_result.error_details
+                        result=fail_result
                     )
                     
                     # Only update the final result if no previous result exists

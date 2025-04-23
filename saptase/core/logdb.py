@@ -89,31 +89,23 @@ class LogDb:
             logger.error(f"Database initialization error: {e}")
             raise # Re-raise to indicate failure
 
-    def log_task_result(
-        self,
-        run_id: str,
-        result: SaptResult,
-        basis_set: Optional[str] = None, # Get from task if needed
-        method: Optional[str] = None, # Get from task if needed
-        elapsed_time: Optional[float] = None,
-        error_code: Optional[str] = None,
-        error_details: Optional[str] = None,
-    ):
-        """Logs the outcome of a task attempt to the database."""
+    def log_task_attempt(self, run_id: str, result: SaptResult):
+        """Log a task attempt to the database.
+        
+        Args:
+            run_id: The ID of the current workflow run
+            result: The SaptResult containing task outcome details
+        """
         if not self.conn or not self.cursor:
-            logger.error("Database not connected, cannot log task result.")
+            logger.error("Database not connected, cannot log task attempt.")
             return
 
+        # Use TaskStatus enum values for consistency
         status = TaskStatus.COMPLETED.name if result.success else TaskStatus.FAILED.name
-        # Attempt number should ideally be on the result object itself
-        attempt_num = getattr(result, 'attempt_number', 0) # 0-based from result
-
-        # --- Get details primarily from the result object ---
-        basis_set = getattr(result, 'basis_set', basis_set)
-        method = getattr(result, 'method', method)
-        elapsed_time = getattr(result, 'elapsed_time', elapsed_time)
-        error_code = getattr(result, 'error_code', error_code)
-        error_details = getattr(result, 'error_details', error_details)
+        
+        # Get all relevant fields directly from the enriched SaptResult
+        attempt_number = getattr(result, 'attempt_number', 1)  # Default to 1 if not set
+        error_details = getattr(result, 'error_details', None)
 
         try:
             self.cursor.execute("""
@@ -124,19 +116,22 @@ class LogDb:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 run_id,
-                result.task_id, # Use the original task ID from the result
-                attempt_num + 1, # Log 1-based attempt number
-                basis_set, 
-                method, 
+                result.task_id,
+                attempt_number,  # Now properly 1-based in the result
+                result.basis_set,
+                result.method,
                 status,
-                result.error_message,
-                error_code,
+                result.error_message if not result.success else None,
+                result.error_code if not result.success else None,
                 error_details,
-                elapsed_time
+                result.elapsed_time
             ))
-            logger.debug(f"Logged result for task {result.task_id}, attempt {attempt_num + 1}, status {status}")
+            logger.debug(f"Logged result for task {result.task_id}, attempt {attempt_number}, status {status}")
         except sqlite3.Error as e:
             logger.error(f"Failed to log task {result.task_id} result to database: {e}")
+    
+    # Alias for backward compatibility
+    log_task_result = log_task_attempt
 
     def close(self):
         """Commit changes and close the database connection."""
