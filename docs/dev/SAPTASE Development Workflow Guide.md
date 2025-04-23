@@ -52,6 +52,113 @@ This guide defines the engineering workflow for building **saptase**, covering c
 *   **Stopping:** The workflow stops when all specified tolerances are met, or when the `max_rung` limit is reached. The final `SaptResult` indicates the basis set level at which convergence was achieved (or the max rung reached).
 *   **Example Configuration:** See `docs/examples/job_adaptive.yml` for an example of how to configure an adaptive workflow job, including setting `target_accuracy` and `max_rung`.
 
+### 3.5 Execution Back-ends
+SAPTASE supports multiple execution back-ends to accommodate different computing environments, from laptops to supercomputers.
+
+#### 3.5.1 Local Serial
+* **Description:** Tasks are executed sequentially on the local machine.
+* **Usage:** `workflow.run_local_serial()` or `saptase run job.yml --mode local`
+* **Best for:** Small calculations, debugging, or when resources are limited.
+
+#### 3.5.2 Local Parallel
+* **Description:** Tasks are executed in parallel using Python's `ProcessPoolExecutor`.
+* **Usage:** `workflow.run_local_parallel(max_workers=4)` or `saptase run job.yml --mode parallel --workers 4`
+* **Best for:** Multi-core workstations where all calculations fit in memory.
+
+#### 3.5.3 Dask Distributed
+* **Description:** Tasks are executed across a Dask cluster (local or remote), providing scalable distributed execution.
+* **Architecture:** Uses `dask.distributed` with optional SLURM integration via `dask_jobqueue`.
+* **Modes:**
+  * **Local Cluster:** Creates a local Dask cluster for development or testing.
+  * **Connect to Existing:** Connects to a running Dask scheduler.
+  * **SLURM Cluster:** Spawns workers using SLURM job queue.
+
+##### Local Dask Example (Python API)
+```python
+from saptase.core.orchestrator import SaptWorkflow
+from saptase.core.models import Molecule, SaptTask
+
+# Create workflow
+workflow = SaptWorkflow()
+
+# Add tasks
+workflow.add_dimer(
+    monomer_a=Molecule(...),
+    monomer_b=Molecule(...),
+    basis_set="jun-cc-pVDZ",
+    method="sapt0"
+)
+
+# Run with local Dask cluster
+results = workflow.run_dask(max_workers=4)
+```
+
+##### Connect to Existing Scheduler
+```python
+from saptase.core.driver import run_sapt_with_mode
+from saptase.core.models import SaptTask
+
+# Define tasks
+tasks = [SaptTask(...)]
+
+# Run with existing Dask scheduler
+results = run_sapt_with_mode(
+    tasks=tasks,
+    mode="dask",
+    dask_scheduler="tcp://192.168.1.100:8786"
+)
+```
+
+##### SLURM Integration
+```python
+from saptase.execution.slurm import create_slurm_cluster
+from saptase.execution.dask import DaskExecutor
+from saptase.core.orchestrator import SaptWorkflow
+
+# Create workflow
+workflow = SaptWorkflow()
+
+# Add tasks...
+
+# Create SLURM cluster
+cluster, client = create_slurm_cluster(
+    queue="compute",
+    cores=1,
+    memory="4GB",
+    walltime="02:00:00",
+    n_workers=10
+)
+
+# Run with SLURM-based Dask cluster
+results = workflow.run_dask(scheduler=client.scheduler.address)
+```
+
+##### YAML Configuration (examples/dask_cluster.yml)
+```yaml
+execution:
+  mode: "dask"
+  dask:
+    scheduler: "tcp://login-node:8786"  # Connect to existing scheduler
+    n_workers: 4  # For local cluster only
+  slurm:  # For SLURM integration
+    queue: "batch"
+    cores: 1
+    memory: "4GB"
+    walltime: "01:00:00"
+```
+
+##### Command Line
+```bash
+# Run with local Dask cluster
+saptase run job.yml --mode dask --workers 4
+
+# Connect to existing scheduler
+saptase run job.yml --mode dask --scheduler tcp://192.168.1.100:8786
+
+# Use config file with SLURM settings
+saptase run --config examples/dask_cluster.yml job.yml
+```
+
 ---
 ## 4  Continuous Integration
 ### 4.1 Pipeline Stages (GitHub Actions)
