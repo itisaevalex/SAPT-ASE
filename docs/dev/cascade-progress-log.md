@@ -231,5 +231,28 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Updated `MockFailureBackend` to populate these new attributes in the returned `SaptResult` upon success (`tests/test_orchestrator.py`).
     - Modified orchestrator (`saptase/core/orchestrator.py`):
         - Ensured `run_local_parallel` uses `basis_set`/`method` from the `result` object for logging successful tasks.
+
+### April 23, 2025: Fixed Asynchronous Task Processing in Error Recovery Ladder
+- **Objective:** Fix issues with parallel error recovery and provenance logging.
+- **Problem:** Asynchronous completion of task attempts was causing incorrect tracking of results and incomplete database logging.
+- **Steps Completed:**
+  - **Refactored worker process logging:**
+    - Added database logging directly in the worker process (`_execute_task_for_parallel`) for each attempt.
+    - Ensured proper closing of database connections in worker processes.
+  - **Fixed result tracking in the main process:**
+    - Implemented a robust state machine for tracking the "best" result for each task:
+      - First successful attempt is always preferred over any failures
+      - For failures, later attempt numbers are preferred over earlier ones
+    - Removed redundant logging from the main process to prevent duplicate database entries.
+  - **Updated tests:**
+    - Aligned test expectations with the new implementation.
+  - **Updated documentation:**
+    - Updated ADR-0004 to include details on async result handling.
+  - **Test Results:**
+    - All tests now pass: `test_orchestrator_recover_basis_incompatible`, `test_orchestrator_recover_scf_failed`, and `test_orchestrator_exhaust_ladder`.
+  - **Key Lessons:**
+    - Asynchronous completion requires explicit rules for result precedence.
+    - Database operations should be centralized in either worker or main process to avoid duplicates.
+    - Tests should make realistic expectations about async behavior.
         - Explicitly set `basis_set`/`method` on the intermediate `fail_result` object within `_execute_task_for_parallel` before logging intermediate failures to the database.
     - Verified test passes, confirming correct data propagation and provenance logging for basis incompatibility recovery.

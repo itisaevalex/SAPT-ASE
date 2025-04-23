@@ -170,18 +170,19 @@ class Psi4Backend(SaptBackend):
             last_scf_error = None
             for attempt, scf_options in enumerate(self.SCF_RECOVERY_LADDER):
                 logger.info(f"SCF Attempt {attempt + 1}/{len(self.SCF_RECOVERY_LADDER)} using options: {scf_options}")
-                try:
-                    # Combine base options, task keywords, and current SCF options
-                    # SCF options should override task/base options if keys conflict
-                    current_options = {
-                        "basis": task.basis_set,
-                        "scf_type": "df",  # Default, might be overridden
-                        "freeze_core": "true",
-                        **task.additional_keywords,  # User keywords first
-                        **scf_options,  # Recovery attempt keywords override
-                    }
-                    psi4.set_options(current_options)
+                psi4.core.clean_variables() # Clean variables between attempts
+                psi4.core.clean_options()   # Clean options between attempts
+                # Re-apply base options + task keywords + attempt options
+                psi4_options = {
+                    "basis": task.basis_set,
+                    "scf_type": "df",
+                    "freeze_core": "true",
+                    **task.additional_keywords,
+                    **scf_options,
+                }
+                psi4.set_options(psi4_options)
 
+                try:
                     # Run the SAPT calculation
                     psi4.energy(task.method, molecule=psi4_mol)
 
@@ -193,79 +194,102 @@ class Psi4Backend(SaptBackend):
                 except psi4.SCFConvergenceError as e:
                     logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
                     last_scf_error = e
-                    # Clean Psi4 environment before next attempt?
-                    # psi4.core.clean_options() # Might be needed?
-                    # psi4.core.clean_variables() # Might be needed?
-                    continue  # Try next set of options
-                except psi4.ValidationError as e:
-                    # Basic check for basis set issues in validation errors
-                    if "basis set" in str(e).lower():
-                        logger.warning(f"Task {task.id} failed: Basis incompatibility suspected.")
-                        raise BasisIncompatible("Basis set incompatible or invalid.", e)
-                    else:
-                        logger.error(f"Task {task.id} failed: Psi4 validation error: {e}")
-                        raise PsiProgramCrashed(f"Psi4 validation error: {e}", e)
-                except psi4.PsiException as e:
-                    # Catch-all for other Psi4 core exceptions
+                    # Loop will continue to next attempt
+                    continue
+                except (psi4.ValidationError, psi4.BasisSetNotFound) as e: # Catch BasisSetNotFound too
                     error_str = str(e).lower()
-                    if "memoryerror" in error_str or "malloc" in error_str:
-                        logger.error(f"Task {task.id} failed: Memory allocation error suspected.")
-                        raise MemoryExceeded("Memory allocation/limit error.", e)
-                    elif "basis set" in error_str:
-                        # Sometimes basis issues appear here too
-                        logger.warning(f"Task {task.id} failed: Basis incompatibility suspected.")
-                        raise BasisIncompatible("Basis set incompatible or invalid.", e)
+                    # Check for keywords indicating a basis set issue
+                    if re.search(r'basis set|basisset|could not find basis', error_str):
+                        logger.error(f"Basis set error encountered: {e}")
+                        raise BasisIncompatible(str(e)) from e
                     else:
-                        logger.error(f"Task {task.id} failed: Generic Psi4 exception: {e}")
-                        raise PsiProgramCrashed(f"Generic Psi4 execution error: {e}", e)
-                except MemoryError as e:
-                    # Catch Python-level MemoryError
-                    logger.error(f"Task {task.id} failed: Python MemoryError.")
-                    raise MemoryExceeded("Python MemoryError during execution.", e)
+                        # If validation error is not basis-related, treat as general crash
+                        logger.error(f"Psi4 validation error (non-basis): {e}")
+                        raise PsiProgramCrashed(f"Psi4 validation error: {e}") from e
+                except psi4.PsiException as e:
+                    error_str = str(e).lower()
+                    # Check for memory allocation errors
+                    if re.search(r'memoryerror|malloc|memory allocation|out of memory', error_str):
+                        logger.error(f"Psi4 memory error detected: {e}")
+                        raise MemoryExceeded(str(e)) from e
+                    else:
+                        # General Psi4 exception
+                        logger.error(f"Unhandled Psi4 exception: {e}")
+                        raise PsiProgramCrashed(f"Psi4 execution failed: {e}") from e
                 except Exception as e:
-                    # Catch any other unexpected errors during Psi4 execution
-                    logger.error(f"Task {task.id} failed: Unexpected error: {type(e).__name__}: {e}")
-                    raise PsiProgramCrashed(f"Unexpected error during Psi4 call: {type(e).__name__}: {e}", e)
+                    # Catch any other unexpected errors during psi4.energy
+                    error_str = str(e).lower()
+                    if re.search(r'memoryerror|malloc|memory allocation|out of memory', error_str):
+                         logger.error(f"Potential memory error detected (non-PsiException): {e}")
+                         raise MemoryExceeded(str(e)) from e
+                    logger.error(f"Unexpected error during Psi4 calculation: {e}", exc_info=True)
+                    raise PsiProgramCrashed(f"Unexpected error: {e}") from e
 
-            # --- End SCF Loop --- #
-
-            # Check if SCF succeeded after all attempts
+            # --- After SCF Loop --- #
             if not scf_success:
-                error_msg = f"SCF failed to converge after {len(self.SCF_RECOVERY_LADDER)} attempts."
-                if last_scf_error: 
-                    # Ensure we append the string representation of the last error
-                    error_msg += f" Last error: {str(last_scf_error)}"
-                # Raise a standard error; the outer handler will catch it.
-                raise ScfFailed(error_msg)
+                logger.error("SCF failed to converge after all recovery attempts.")
+                # Raise ScfFailed using the error from the last failed attempt
+                raise ScfFailed(str(last_scf_error)) from last_scf_error
 
-            # --- Extract results (only if SCF succeeded) --- #
-            result.energies = {
-                "total": psi4.variable("SAPT TOTAL ENERGY"),
-                "electrostatics": psi4.variable("SAPT ELST ENERGY"),
-                "exchange": psi4.variable("SAPT EXCH ENERGY"),
-                "induction": psi4.variable("SAPT IND ENERGY"),
-                "dispersion": psi4.variable("SAPT DISP ENERGY"),
-            }
-
-            # Get the output
-            try:
-                with open("psi4_output.dat") as f:
-                    result.raw_output = f.read()
-            except FileNotFoundError:
-                pass
-
-            # Update status
-            task.status = TaskStatus.COMPLETED
+            # --- Extract Results (if successful) --- #
             result.success = True
+            task.status = TaskStatus.COMPLETED
+            # Example: Extract SAPT0 components (adjust for other methods)
+            # Ensure variables exist before accessing
+            sapt_components = [
+                'SAPT0 TOTAL ENERGY',
+                'SAPT Electrostatics',
+                'SAPT Exchange',
+                'SAPT Induction',
+                'SAPT Dispersion'
+            ]
+            for comp in sapt_components:
+                var_name = f'{task.method.upper()} {comp}' if 'SAPT0' not in comp else comp # Handle naming diffs
+                if psi4.variable(var_name):
+                     # Convert Hartree to kcal/mol
+                     result.energies[comp] = psi4.variable(var_name) * 627.509
+                else:
+                    logger.warning(f"Psi4 variable '{var_name}' not found after successful run.")
 
-        except Exception as e:
-            # Catch errors from setup phase or re-raised errors from SCF loop
-            # Handle any errors
+            result.raw_output = psi4.core.get_output_file_path()
+
+            # Add basis and method used to the result for provenance
+            result.basis_set = task.basis_set
+            result.method = task.method
+
+            return result
+
+        except SaptError as e:
+            # Catch SaptErrors raised within the loop (BasisIncompatible, MemoryExceeded, etc.)
+            # And ScfFailed raised after the loop
             task.status = TaskStatus.FAILED
             result.success = False
             result.error_message = str(e)
-
-        return result
+            result.error_code = type(e).__name__
+            # Log the basis/method even on failure
+            result.basis_set = task.basis_set
+            result.method = task.method
+            logger.error(f"Task {task.id} failed with {type(e).__name__}: {e}")
+            # Re-raise the caught SaptError so the orchestrator can handle it
+            raise
+        except Exception as e:
+            # Catch any other unexpected errors during setup/teardown
+            task.status = TaskStatus.FAILED
+            result.success = False
+            result.error_message = f"Unexpected backend error: {e}"
+            result.error_code = type(e).__name__ # Or a generic code like 'BackendError'
+            # Log the basis/method even on failure
+            result.basis_set = task.basis_set
+            result.method = task.method
+            logger.critical(f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True)
+            # Wrap unexpected errors in PsiProgramCrashed or a new generic BackendError?
+            # Let's use PsiProgramCrashed for now, assuming it originates from Psi4 setup/interaction
+            raise PsiProgramCrashed(f"Unexpected backend error: {e}") from e
+        finally:
+            # Ensure Psi4 output file is closed/cleaned if necessary
+            # psi4.core.clean() # Maybe too aggressive? Cleans everything.
+            # Just ensure the output file handler is released if open
+            pass
 
 
 class CamCaspBackend(SaptBackend):

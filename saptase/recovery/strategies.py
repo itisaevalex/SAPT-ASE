@@ -32,14 +32,17 @@ def recover_basis_incompatible(task: SaptTask, error: Exception) -> SaptTask:
     return new_task
 
 def recover_scf_failed_simple(task: SaptTask, error: Exception) -> SaptTask:
-    """Strategy: Relax SCF convergence criteria and increase iterations."""
+    """Strategy: Add level shift, relax convergence, and increase iterations."""
     new_task = copy.deepcopy(task)
     # Get current or default values
     current_d_conv = new_task.additional_keywords.get("d_convergence", 1e-7)
     current_e_conv = new_task.additional_keywords.get("e_convergence", 1e-7)
     current_maxiter = new_task.additional_keywords.get("maxiter", 50)
 
-    # Apply simple recovery keywords (make less stringent)
+    # Apply simple recovery keywords
+    # Add level shift first, as expected by the test
+    new_task.additional_keywords["level_shift"] = 0.5
+    # Relax convergence (make less stringent)
     new_task.additional_keywords["d_convergence"] = min(1e-5, current_d_conv * 10) # Relax by factor of 10, capped
     new_task.additional_keywords["e_convergence"] = min(1e-5, current_e_conv * 10)
     new_task.additional_keywords["maxiter"] = current_maxiter + 50 # Increase iterations
@@ -47,7 +50,7 @@ def recover_scf_failed_simple(task: SaptTask, error: Exception) -> SaptTask:
     # new_task.additional_keywords["level_shift"] = 0.3
     # new_task.additional_keywords["soscf"] = "true"
 
-    logger.info(f"Recovery: Task {task.id} - ScfFailed. Relaxed convergence and increased maxiter.")
+    logger.info(f"Recovery: Task {task.id} - ScfFailed. Added level_shift, relaxed convergence, increased maxiter.")
     new_task.additional_keywords["recovery_strategy"] = recover_scf_failed_simple.__name__
     return new_task
 
