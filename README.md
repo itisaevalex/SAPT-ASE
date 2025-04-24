@@ -1,4 +1,5 @@
 # SAPTASE: Automated Multi-Fidelity SAPT(DFT) Workflows
+![version](https://img.shields.io/badge/version-0.4.0-blue)
 
 SAPTASE is a Python framework for automating Symmetry-Adapted Perturbation Theory (SAPT) calculations with a focus on:
 
@@ -7,14 +8,15 @@ SAPTASE is a Python framework for automating Symmetry-Adapted Perturbation Theor
 - Multi-fidelity approach (DMA and ML surrogates)
 - Integration with popular QC packages (Psi4, CamCASP, SAPT2020)
 
+## What’s new in 0.4.0?
+
+- Distributed execution via *Dask* (`--mode dask`).
+- Scratch isolation & WAL-backed provenance DB for multi-process safety.
+- Optional SLURM cluster helper (`create_slurm_cluster`).
+
 ## Minimum Viable Prototype (MVP)
 
-The current version (0.1.0-mvp) implements the core functionality for running SAPT0 calculations with Psi4:
-
-- Basic molecule representation with XYZ format support
-- SAPT task and result data structures
-- Psi4 backend for single-threaded SAPT0 calculations
-- Simple workflow for running multiple SAPT tasks
+The current version is **0.4.0** and includes distributed execution.
 
 ## Installation
 
@@ -69,6 +71,42 @@ result = run_sapt(water_a, water_b, basis_set="jun-cc-pVDZ", method="sapt0")
 # Print results
 print(f"Total interaction energy: {result.total_energy:.8f} Hartree")
 print(f"                          {result.total_energy_kcal_mol():.4f} kcal/mol")
+```
+
+## Quick-start: Distributed execution & scratch control
+
+Run via a *local* Dask cluster using CLI – scratch directories land under `tmp/scratch` and are deleted when done:
+
+```bash
+export SAPTASE_SCRATCH_ROOT=/tmp/scratch
+saptase run job.yml --mode dask --workers 4
+```
+
+Keep scratch for debugging:
+
+```bash
+saptase run job.yml --mode dask --workers 4 --keep-scratch
+```
+
+### Submitting to SLURM
+
+First install the *dask_jobqueue* extra:
+
+```bash
+pip install "saptase[dask_jobqueue]"
+```
+
+Then in Python:
+
+```python
+from saptase.execution.slurm import create_slurm_cluster
+from saptase.execution.dask import DaskExecutor
+from saptase.core.orchestrator import SaptWorkflow
+
+cluster, client = create_slurm_cluster(queue="compute", cores=4, memory="8GB", n_workers=10)
+workflow = SaptWorkflow()
+# add tasks ...
+workflow.run_dask(client=client)
 ```
 
 ## Testing

@@ -10,6 +10,8 @@ from typing import List, Optional
 
 import numpy as np  # Needed for Molecule coordinates
 
+from .config import EXECUTION  # Global scratch config
+
 # Import necessary components
 from .core.interop.yaml import load_config
 from .core.models import Molecule, SaptTask
@@ -161,12 +163,35 @@ def main(argv: Optional[List[str]] = None):
 
     # --- Add other commands here later (e.g., 'run' for standard workflow) ---
 
+    # ------------------------------------------------------------------
+    # Global options applicable to all sub-commands
+    # ------------------------------------------------------------------
+    parser.add_argument(
+        "--scratch-root",
+        type=str,
+        default=None,
+        help="Override default scratch directory root (env SAPTASE_SCRATCH_ROOT).",
+    )
+    parser.add_argument(
+        "--keep-scratch",
+        action="store_true",
+        help="Do **not** delete task scratch dirs after completion (debugging aid)",
+    )
+
     if not argv:
         parser.print_help()
         sys.exit(1)
 
     args = parser.parse_args(argv)
     args.func(args)
+
+    # ------------------------------------------------------------------
+    # Apply global CLI flags → runtime config singleton
+    # ------------------------------------------------------------------
+    if args.scratch_root is not None:
+        EXECUTION.scratch_root = args.scratch_root
+    if args.keep_scratch:
+        EXECUTION.keep_scratch = True
 
 
 if __name__ == "__main__":

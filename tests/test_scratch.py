@@ -1,11 +1,9 @@
 """Unit tests for TaskScratch context manager."""
+
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
-
-import pytest
 
 from saptase.core.scratch import TaskScratch
 

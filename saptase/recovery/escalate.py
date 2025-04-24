@@ -247,7 +247,9 @@ class EscalationContext:
             err = self.last_error
 
         if err is None:
-            raise RuntimeError("EscalationContext.apply() called before any error was recorded; call can_retry() first.")
+            raise RuntimeError(
+                "EscalationContext.apply() called before any error was recorded; call can_retry() first."
+            )
 
         strategy_info = self._find_next_strategy(err)
         if not strategy_info:

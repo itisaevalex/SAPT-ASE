@@ -1,4 +1,4 @@
-"""Scratch-directory isolation helpers.
+r"""Scratch-directory isolation helpers.
 
 This module provides :class:`TaskScratch`, a context manager that guarantees
 **per-task** scratch isolation for Psi4 (and other back-ends) while
@@ -19,13 +19,13 @@ The context therefore ensures:
 The scratch root defaults to ``$SAPTASE_SCRATCH_ROOT`` \| ``$TMPDIR`` \|
 ``$TEMP`` \| ``/tmp``.
 """
+
 from __future__ import annotations
 
 import contextlib
 import logging
 import os
 import shutil
-import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -81,7 +81,7 @@ class TaskScratch(contextlib.AbstractContextManager):
         logger.debug("Task %s using scratch dir %s", self.task_id, self.dir_path)
         return str(self.dir_path)
 
-    def __exit__(self, exc_type, exc, tb):  # noqa: D401 – simple verb OK
+    def __exit__(self, exc_type, exc, tb):
         # Restore previous environment (or delete variable if absent before)
         for var, old in self._old_env.items():
             if old is None:

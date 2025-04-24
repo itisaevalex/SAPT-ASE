@@ -1,6 +1,6 @@
 """SAPTASE: Automated multi-fidelity SAPT(DFT) workflows."""
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
 
 # Expose core components
 from .core.backend import Psi4Backend, SaptBackend  # Optional: if users need direct access

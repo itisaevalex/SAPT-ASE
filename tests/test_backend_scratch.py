@@ -1,19 +1,18 @@
 """Tests that back-ends respect TaskScratch isolation without real Psi4."""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-
 from saptase.core.backend import Psi4Backend
-from saptase.core.models import Molecule, SaptTask, TaskStatus
+from saptase.core.models import Molecule, SaptTask
 from saptase.core.scratch import TaskScratch
 
 
 class DummyPsi4:  # minimal stub
-    class core:  # noqa: D401 – match attribute access used in backend
+    class core:
         @staticmethod
         def clean():
             pass
@@ -23,7 +22,7 @@ class DummyPsi4:  # minimal stub
             pass
 
         @staticmethod
-        def get_output_file_path():  # noqa: D401 – mimic Psi4 API
+        def get_output_file_path():
             return str(Path(os.environ["PSI_SCRATCH"]) / "psi4_output.dat")
 
         @staticmethod
@@ -51,22 +50,22 @@ class DummyPsi4:  # minimal stub
         pass
 
     @staticmethod
-    def set_options(*args, **kwargs):  # noqa: D401 – mimic Psi4 API
+    def set_options(*args, **kwargs):
         pass
 
     @staticmethod
-    def geometry(mol):  # noqa: D401
+    def geometry(mol):
         return None
 
     @staticmethod
-    def energy(method, molecule=None):  # noqa: D401
+    def energy(method, molecule=None):
         # Write sentinel into scratch dir
         sentinel = Path(os.environ["PSI_SCRATCH"]) / "sentinel.txt"
         sentinel.write_text("ok")
         return 0.0
 
     @staticmethod
-    def variable(name):  # noqa: D401
+    def variable(name):
         # Return fake energies
         return -0.1
 

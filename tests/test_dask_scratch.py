@@ -1,9 +1,7 @@
 import os
-from pathlib import Path
 
 import pytest
-from dask.distributed import LocalCluster, Client
-
+from dask.distributed import Client, LocalCluster
 from saptase.core.models import Molecule, SaptTask
 from saptase.execution.dask import DaskExecutor
 

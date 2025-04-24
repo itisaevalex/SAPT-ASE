@@ -1,5 +1,5 @@
 """Ensure LogDb enables WAL mode and busy-timeout automatically."""
-from pathlib import Path
+
 import sqlite3
 
 from saptase.core.logdb import LogDb

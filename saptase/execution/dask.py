@@ -9,16 +9,17 @@ Future‑like objects.  We *could* just re‑use ``Client`` directly, but wrappi
 lets us hide the logic of *create a LocalCluster OR connect to existing* and
 also cleanly close everything in a context manager.
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Callable, Optional, List, Dict
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 try:
-    from dask.distributed import Client, LocalCluster, Future
+    from dask.distributed import Client, Future, LocalCluster
 except ImportError as exc:  # pragma: no cover – optional dependency missing
     raise ImportError(
         "The 'dask.distributed' package is required for Dask execution; install with `pip install \"dask[distributed]\"`."
@@ -62,7 +63,9 @@ class DaskExecutor:
             logger.debug("Using provided Dask Client instance (%s)", scheduler)
 
         elif scheduler is None:
-            self._cluster = LocalCluster(n_workers=n_workers or os.cpu_count(), threads_per_worker=1)
+            self._cluster = LocalCluster(
+                n_workers=n_workers or os.cpu_count(), threads_per_worker=1
+            )
             self.client = Client(self._cluster)
             logger.debug("Started LocalCluster with %d workers", len(self._cluster.workers))
         else:
@@ -93,7 +96,7 @@ class DaskExecutor:
         """Submit a function with *args* exactly as in ProcessPoolExecutor path."""
         return self.client.submit(fn, *args)
 
-    def close(self) -> None:  # noqa: D401 (simple verb OK)
+    def close(self) -> None:
         """Close client and *owned* cluster (if any)."""
         try:
             self.client.close()
@@ -115,10 +118,11 @@ class DaskExecutor:
     # ------------------------------------------------------------------
     # Simple helper for unit tests – run list[SaptTask] with DummyBackend
     # ------------------------------------------------------------------
-    def run_tasks(self, tasks: List["SaptTask"]):  # noqa: D401 – simple verb OK
+    def run_tasks(self, tasks: List["SaptTask"]):
         """Execute tasks and wait for completion (DummyBackend)."""
         from dask.distributed import as_completed
-        from saptase.core.models import SaptTask, SaptResult
+
+        from saptase.core.models import SaptResult
 
         futures = {self.submit_task(_dummy_worker, t): t.id for t in tasks}
         results: Dict[str, "SaptResult"] = {}

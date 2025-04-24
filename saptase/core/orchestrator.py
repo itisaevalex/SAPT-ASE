@@ -16,13 +16,14 @@ from typing import Any, Dict, List, Optional
 
 from tqdm import tqdm
 
+from saptase.config import EXECUTION  # scratch defaults
+from saptase.core.scratch import TaskScratch  # Import TaskScratch
+
 from ..recovery.escalate import EscalationContext  # Import recovery context
 from .backend import Psi4Backend, SaptBackend
 from .errors import SaptError  # Import base SaptError
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
-from saptase.config import EXECUTION  # scratch defaults
-from saptase.core.scratch import TaskScratch  # Import TaskScratch
 
 logger = logging.getLogger(__name__)
 
@@ -118,11 +119,6 @@ def _execute_task_for_parallel(
     if isinstance(backend, Psi4Backend):
         os.environ["OMP_NUM_THREADS"] = "1"
 
-    # Initialize local LogDb for logging each attempt in the worker process
-    from .logdb import LogDb
-
-    logdb = LogDb(db_path)
-
     context = EscalationContext(task=task, max_attempts=max_attempts)
     original_task_id = task.id  # Store original ID for final logging
     result = None  # Initialize result variable
@@ -146,37 +142,45 @@ def _execute_task_for_parallel(
             keep_scratch_flag = task.additional_keywords.get("keep_scratch", False)
             scratch_root_flag = task.additional_keywords.get("scratch_root")
 
-            with TaskScratch(task.id, scratch_root=scratch_root_flag, keep_scratch=keep_scratch_flag):
+            with TaskScratch(
+                task.id, scratch_root=scratch_root_flag, keep_scratch=keep_scratch_flag
+            ):
+                from .logdb import LogDb  # local import to avoid heavy dep before ctx
+
+                logdb = LogDb(db_path)
+
                 task_result = backend.calculate(task)
 
-            elapsed_time = time.monotonic() - current_attempt_start_time
+                elapsed_time = time.monotonic() - current_attempt_start_time
 
-            # --- Process Success ---
-            if task_result.success:
-                worker_logger.info(
-                    f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}."
-                )
-                # Use 0-based attempt numbering to be consistent with the recovery ladder
-                task_result.attempt_number = context.attempt_index
-                task_result.elapsed_time = elapsed_time
-                task_result.basis_set = task.basis_set  # Ensure these are set from task state
-                task_result.method = task.method
+                # --- Process Success ---
+                if task_result.success:
+                    worker_logger.info(
+                        f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}."
+                    )
+                    # Use 0-based attempt numbering to be consistent with the recovery ladder
+                    task_result.attempt_number = context.attempt_index
+                    task_result.elapsed_time = elapsed_time
+                    task_result.basis_set = task.basis_set  # Ensure these are set from task state
+                    task_result.method = task.method
 
-                # Log this successful attempt to the database
-                logdb.log_task_attempt(run_id=run_id, result=task_result)
+                    # Log this successful attempt to the database and close connection
+                    logdb.log_task_attempt(run_id=run_id, result=task_result)
+                    logdb.close()
 
-                result = task_result  # Store final success result
-                break  # Exit the while loop on success
+                    result = task_result  # Store final success result
+                    break  # Exit the while loop on success
 
-            # Should not happen if backend.calculate follows contract (raises SaptError on fail)
-            else:
-                worker_logger.error(
-                    f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure."
-                )
-                # Synthesize an error to proceed with retry logic
-                raise SaptError(
-                    task_result.error_message or "Backend indicated failure without specific error"
-                )
+                # Should not happen if backend.calculate follows contract (raises SaptError on fail)
+                else:
+                    worker_logger.error(
+                        f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure."
+                    )
+                    # Synthesize an error to proceed with retry logic
+                    raise SaptError(
+                        task_result.error_message
+                        or "Backend indicated failure without specific error"
+                    )
 
         except SaptError as err:
             worker_logger.warning(
@@ -199,8 +203,10 @@ def _execute_task_for_parallel(
             failed_attempt_result.attempt_number = context.attempt_index
             failed_attempt_result.elapsed_time = elapsed_time
 
-            # Log this failed attempt to the database
-            logdb.log_task_attempt(run_id=run_id, result=failed_attempt_result)
+            # Log failed attempt inside scratch directory with fresh connection
+            _ldb = LogDb(db_path)
+            _ldb.log_task_attempt(run_id=run_id, result=failed_attempt_result)
+            _ldb.close()
 
             # Note: We don't need to call context.record_failure(err) separately anymore
             # since the refactored can_retry method now does this internally
@@ -293,9 +299,6 @@ def _execute_task_for_parallel(
     worker_logger.debug(
         f"WORKER_LOGGING Task {task.id}: Returning result with attempt_number={getattr(result, 'attempt_number', 'None')}"
     )
-
-    # Close the database connection before returning
-    logdb.close()
 
     return result  # Return the final SaptResult
 
@@ -573,7 +576,9 @@ class SaptWorkflow:
         if not getattr(self, "current_run_id", None):
             self.current_run_id = f"run_{uuid.uuid4().hex[:8]}"
         logger.info(
-            "Starting Dask workflow run_id=%s, scheduler=%s", self.current_run_id, scheduler or "LocalCluster"
+            "Starting Dask workflow run_id=%s, scheduler=%s",
+            self.current_run_id,
+            scheduler or "LocalCluster",
         )
 
         # Identify pending tasks
@@ -602,7 +607,9 @@ class SaptWorkflow:
 
         # Dask.as_completed gives Futures as they finish
         try:
-            from dask.distributed import as_completed  # Local import to avoid hard dep when not used
+            from dask.distributed import (
+                as_completed,
+            )  # Local import to avoid hard dep when not used
         except ImportError:  # pragma: no cover
             raise RuntimeError("dask.distributed is required for run_dask")
 
@@ -616,15 +623,23 @@ class SaptWorkflow:
                 replace = (
                     existing is None
                     or (res.success and not existing.success)
-                    or (not res.success and not existing.success and res.attempt_number > existing.attempt_number)
+                    or (
+                        not res.success
+                        and not existing.success
+                        and res.attempt_number > existing.attempt_number
+                    )
                 )
                 if replace:
                     self.results[original_task_id] = res
                     results_list.append(res)
                     if original_task:
-                        original_task.status = TaskStatus.COMPLETED if res.success else TaskStatus.FAILED
-            except Exception as exc:  # noqa: BLE001
-                logger.critical("Dask future for %s raised: %s", original_task_id, exc, exc_info=True)
+                        original_task.status = (
+                            TaskStatus.COMPLETED if res.success else TaskStatus.FAILED
+                        )
+            except Exception as exc:
+                logger.critical(
+                    "Dask future for %s raised: %s", original_task_id, exc, exc_info=True
+                )
                 fail_res = SaptResult(
                     task_id=original_task_id,
                     success=False,
@@ -641,7 +656,11 @@ class SaptWorkflow:
         # Cleanup
         executor.close()
         self.logdb.close()
-        logger.info("Dask execution for run_id %s finished (%d tasks).", self.current_run_id, len(results_list))
+        logger.info(
+            "Dask execution for run_id %s finished (%d tasks).",
+            self.current_run_id,
+            len(results_list),
+        )
         return self.results
 
     def get_result(self, task_id: str) -> Optional[SaptResult]:
@@ -729,7 +748,7 @@ def run_adaptive_workflow(
 # -----------------------------------------------------------------------------
 # *Testing* helper – minimal backend so that tests can monkey‑patch it.
 # -----------------------------------------------------------------------------
-class MockBackend(SaptBackend):  # noqa: D101 – simple stub for unit‑tests only
+class MockBackend(SaptBackend):
     """Extremely thin backend used solely by the test‑suite.
 
     The real behaviour is provided by `monkeypatch` in ``tests/test_adaptive.py``
@@ -740,7 +759,7 @@ class MockBackend(SaptBackend):  # noqa: D101 – simple stub for unit‑tests 
     works without raising *AttributeError* at import‑time.
     """
 
-    def calculate(self, task: SaptTask) -> SaptResult:  # noqa: D401 (simple verb OK)
+    def calculate(self, task: SaptTask) -> SaptResult:
         result = SaptResult(task_id=task.id)
         result.success = False
         result.error_message = (

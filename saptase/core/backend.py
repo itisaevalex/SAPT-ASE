@@ -12,14 +12,16 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
+
 # Optional import of Psi4 (for tests we monkeypatch)
 try:
     import psi4  # type: ignore
 except ImportError:
     psi4 = None  # pragma: no cover – allow running without Psi4
 
-from .models import SaptResult, SaptTask, TaskStatus
 from saptase.core.scratch import TaskScratch
+
+from .models import SaptResult, SaptTask, TaskStatus
 
 
 class SaptBackend(ABC):
@@ -50,12 +52,11 @@ class DummyBackend(SaptBackend):
     the library).  **Do not** use this in production code.
     """
 
-    def calculate(self, task: SaptTask) -> SaptResult:  # noqa: D401 (simple verb OK)
+    def calculate(self, task: SaptTask) -> SaptResult:
         result = SaptResult(task_id=task.id)
         result.success = False
         result.error_message = (
-            "DummyBackend cannot execute real calculations – it is intended for"
-            " test use only."
+            "DummyBackend cannot execute real calculations – it is intended for" " test use only."
         )
         task.status = TaskStatus.FAILED
         return result
@@ -89,7 +90,7 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
         try:
             from saptase.core.orchestrator import MockBackend  # dynamic import
 
-            return MockBackend()  # noqa: B023 – returned even if patched
+            return MockBackend()
         except Exception:  # pragma: no cover – fallback when not patched
             # If for some reason the orchestrator has no MockBackend (or tests
             # didn’t patch it), fall back to an inert implementation so that the
@@ -265,7 +266,11 @@ class Psi4Backend(SaptBackend):
             if not scf_success:
                 # Try to format the error similar to Psi4's real __str__ so that
                 # unit-tests (which assert against this exact string) succeed
-                if last_scf_error and getattr(last_scf_error, "args", None) and len(last_scf_error.args) >= 2:
+                if (
+                    last_scf_error
+                    and getattr(last_scf_error, "args", None)
+                    and len(last_scf_error.args) >= 2
+                ):
                     err_descr, iterations, *_ = last_scf_error.args
                     formatted_err = f"Could not converge {err_descr} in {iterations} iterations."
                 else:
@@ -299,7 +304,17 @@ class Psi4Backend(SaptBackend):
                     result.energies[simple_key] = float(val)
 
             # total energy handled below
-            result.raw_output = psi4.core.get_output_file_path()
+            # Retrieve Psi4 output path – tolerate older versions & mocks
+            raw_out: Optional[str] = None
+            try:
+                raw_out = psi4.core.get_output_file_path()  # type: ignore[attr-defined]
+            except AttributeError:
+                try:
+                    raw_out = psi4.core.get_output_file()  # fallback name in some versions/mocks
+                except AttributeError:
+                    raw_out = None
+
+            result.raw_output = raw_out
 
             # Store *raw Hartree* total energy under the canonical key "total" –
             # unit‑tests rely on this.
@@ -316,9 +331,7 @@ class Psi4Backend(SaptBackend):
             if total_h is None:
                 # Fallback: sum per‑component kcal values (then convert back)
                 try:
-                    kcal_sum = sum(
-                        v for k, v in result.energies.items() if k != "total"
-                    )
+                    kcal_sum = sum(v for k, v in result.energies.items() if k != "total")
                     total_h = kcal_sum / 627.509
                 except Exception:  # pragma: no cover – give up
                     pass

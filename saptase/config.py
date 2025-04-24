@@ -5,17 +5,18 @@ code without sprinkling *magic strings* everywhere.  In a future release these
 could be populated from a YAML/INI file or environment variables, but for now
 hard-coded constants are sufficient.
 """
+
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
-import os
 
-__all__ = ["ExecutionConfig", "EXECUTION"]
+__all__ = ["EXECUTION", "ExecutionConfig"]
 
 
 @dataclass(slots=True)
-class ExecutionConfig:  # noqa: D101 – simple value object
+class ExecutionConfig:
     scratch_root: Optional[str] = None  # ``None`` ⇒ system temp dir
     keep_scratch: bool = False
 

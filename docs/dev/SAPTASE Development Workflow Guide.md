@@ -208,4 +208,23 @@ saptase run --config examples/dask_cluster.yml job.yml
 * Sign off commits (`‑s`) for DCO compliance.
 
 ---
+## Scratch & WAL behaviour
+SAPTASE creates a *per-task* scratch directory inside the configurable
+`ExecutionConfig.scratch_root` (defaults to OS‐temp or `$SAPTASE_SCRATCH_ROOT`).
+
+* The directory scheme is `<scratch_root>/<run_id>/<task_id>` which guarantees
+  uniqueness across workers and retries.
+* By default scratch is **deleted** on successful completion.  Pass
+  `--keep-scratch` *or* set the env-var `SAPTASE_KEEP_SCRATCH=1` to retain all
+  intermediates for debugging.
+* On shared clusters always point `scratch_root` to *node-local* storage
+  (e.g. `$TMPDIR`) to avoid saturating network filesystems.
+
+The provenance database (`LogDb`) is an SQLite file opened in
+*Write-Ahead Logging* (WAL) mode with a `PRAGMA busy_timeout = 10000`.  WAL
+allows concurrent writes from multiple Dask workers while readers remain
+lock-free.  For multi-node clusters place the DB on a shared filesystem (e.g.
+GPFS, Lustre) that supports file locking.
+
+---
 _End of Development Workflow Guide_

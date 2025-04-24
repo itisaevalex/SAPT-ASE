@@ -2,12 +2,13 @@
 
 We deliberately avoid Psi4 here – only check orchestration + Dask wiring.
 """
+
 from __future__ import annotations
 
 import os
+import socket
 from dataclasses import dataclass
 
-import socket
 import pytest
 from saptase.core.models import Molecule, SaptResult, SaptTask, TaskStatus
 from saptase.core.orchestrator import SaptBackend, SaptWorkflow
@@ -24,7 +25,7 @@ class SleepyMockBackend(SaptBackend):
 
     sleep_time: float = 0.05
 
-    def calculate(self, task: SaptTask) -> SaptResult:  # noqa: D401 (simple verb ok)
+    def calculate(self, task: SaptTask) -> SaptResult:
         import time
 
         time.sleep(self.sleep_time)
@@ -66,7 +67,7 @@ def test_dask_execution_external_scheduler(monkeypatch, tmp_path):
     from saptase.execution import dask as dask_exec_mod
 
     class FakeExec:
-        def __init__(self, scheduler=None, n_workers=None):  # noqa: D401
+        def __init__(self, scheduler=None, n_workers=None):
             from concurrent.futures import ProcessPoolExecutor
 
             self._executor = ProcessPoolExecutor(max_workers=n_workers or os.cpu_count())
