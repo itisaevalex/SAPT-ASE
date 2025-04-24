@@ -7,8 +7,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+import socket
 import pytest
-
 from saptase.core.models import Molecule, SaptResult, SaptTask, TaskStatus
 from saptase.core.orchestrator import SaptBackend, SaptWorkflow
 
@@ -54,7 +54,11 @@ def test_dask_execution_localcluster(tmp_path):
     assert all(t.status == TaskStatus.COMPLETED for t in wf.tasks)
 
 
+scheduler_up = socket.socket().connect_ex(("localhost", 8786)) == 0
+
+
 @pytest.mark.dask
+@pytest.mark.skipif(not scheduler_up, reason="No scheduler running on :8786")
 def test_dask_execution_external_scheduler(monkeypatch, tmp_path):
     """Pretend to connect to an external scheduler by monkey‑patching DaskExecutor."""
 

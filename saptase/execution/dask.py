@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,26 @@ except ImportError as exc:  # pragma: no cover – optional dependency missing
     ) from exc
 
 
+def _dummy_worker(task):  # top-level picklable helper for tests
+    """Execute a task with DummyBackend inside TaskScratch (for unit tests)."""
+    from saptase.core.backend import DummyBackend  # local import to avoid heavy deps
+    from saptase.core.scratch import TaskScratch
+
+    backend = DummyBackend()
+    keep = task.additional_keywords.get("keep_scratch", False)
+    root = task.additional_keywords.get("scratch_root")
+    with TaskScratch(task.id, scratch_root=root, keep_scratch=keep) as scr:
+        # create sentinel file to verify isolation in tests
+        from pathlib import Path
+
+        Path(scr).joinpath("sentinel.txt").write_text("ok")
+        return backend.calculate(task)
+
+
 class DaskExecutor:
     """Helper that owns a ``dask.distributed.Client`` (and optionally a Cluster)."""
 
-    def __init__(self, scheduler: Optional[str] = None, n_workers: Optional[int] = None):
+    def __init__(self, scheduler: Optional[Any] = None, n_workers: Optional[int] = None):
         """Create a Dask client.
 
         Parameters
@@ -39,7 +55,13 @@ class DaskExecutor:
         n_workers
             Number of workers when creating a *new* LocalCluster.
         """
-        if scheduler is None:
+        # Accept passing an *existing* Client instance (unit-tests convenience)
+        if isinstance(scheduler, Client):
+            self.client = scheduler
+            self._cluster = None
+            logger.debug("Using provided Dask Client instance (%s)", scheduler)
+
+        elif scheduler is None:
             self._cluster = LocalCluster(n_workers=n_workers or os.cpu_count(), threads_per_worker=1)
             self.client = Client(self._cluster)
             logger.debug("Started LocalCluster with %d workers", len(self._cluster.workers))
@@ -89,3 +111,25 @@ class DaskExecutor:
     # Convenience for tests
     def __getattr__(self, item):  # proxy everything else to Client
         return getattr(self.client, item)
+
+    # ------------------------------------------------------------------
+    # Simple helper for unit tests – run list[SaptTask] with DummyBackend
+    # ------------------------------------------------------------------
+    def run_tasks(self, tasks: List["SaptTask"]):  # noqa: D401 – simple verb OK
+        """Execute tasks and wait for completion (DummyBackend)."""
+        from dask.distributed import as_completed
+        from saptase.core.models import SaptTask, SaptResult
+
+        futures = {self.submit_task(_dummy_worker, t): t.id for t in tasks}
+        results: Dict[str, "SaptResult"] = {}
+        for fut in as_completed(futures):
+            tid = futures[fut]
+            try:
+                res = fut.result()
+            except Exception as exc:  # pragma: no cover
+                import warnings
+
+                warnings.warn(f"Task {tid} raised {exc}")
+                res = None
+            results[tid] = res
+        return results

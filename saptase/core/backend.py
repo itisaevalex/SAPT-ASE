@@ -154,35 +154,21 @@ class Psi4Backend(SaptBackend):
             self._psi4_available = True
 
     def calculate(self, task: SaptTask) -> SaptResult:
-        """Perform a SAPT calculation using Psi4 with SCF recovery.
+        """Perform a SAPT calculation wrapped in a TaskScratch directory."""
 
-        This method sets up and runs the specified SAPT task using Psi4.
-        If the initial SCF calculation fails to converge, it automatically
-        retries the calculation using a sequence of more robust SCF options
-        defined in `SCF_RECOVERY_LADDER`.
-
-        Args:
-            task: The SAPT calculation task to perform
-
-        Returns:
-            A SaptResult containing the calculation results, or details
-            of the failure if the calculation (including recovery attempts)
-            is unsuccessful.
-        """
-        # Create a result object with the task ID
-        result = SaptResult(task_id=task.id)
-
-        # Inner TaskScratch context (idempotent) for robustness
         keep_flag = task.additional_keywords.get("keep_scratch", False)
         root_flag = task.additional_keywords.get("scratch_root")
 
         with TaskScratch(task.id, scratch_root=root_flag, keep_scratch=keep_flag):
-            return self._calculate_inner(task, result)
+            return self._calculate_inner(task)
 
     # ------------------------------------------------------------------
     # Actual heavy-lifting (split to keep outer context concise)
     # ------------------------------------------------------------------
-    def _calculate_inner(self, task: SaptTask, result: SaptResult) -> SaptResult:
+    def _calculate_inner(self, task: SaptTask) -> SaptResult:
+        # Create result inside for pure function
+        result = SaptResult(task_id=task.id)
+
         try:
             # Update task status
             task.status = TaskStatus.RUNNING
