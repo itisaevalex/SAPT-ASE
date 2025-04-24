@@ -38,8 +38,13 @@ class LogDb:
         self.conn: Optional[sqlite3.Connection] = None
         self.cursor: Optional[sqlite3.Cursor] = None
         try:
-            self.conn = sqlite3.connect(self.db_path, isolation_level=None)  # Autocommit mode
+            self.conn = sqlite3.connect(self.db_path, isolation_level=None)  # Autocommit
             self.cursor = self.conn.cursor()
+
+            # Enable WAL mode and set busy-timeout for concurrency safety
+            self.cursor.execute("PRAGMA journal_mode=WAL;")
+            self.cursor.execute("PRAGMA busy_timeout=10000;")
+
             self._initialize_db()
             logger.info(f"Connected to provenance database: {self.db_path}")
         except sqlite3.Error as e:
