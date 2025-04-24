@@ -333,3 +333,17 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Balance between strict linting rules and development productivity is important
     - Targeted rule relaxation helps maintain code quality while avoiding unnecessary friction
     - Pre-commit hooks help ensure consistent formatting without manual intervention
+
+### April 24, 2025: Phase 5b Hardening – Scratch Isolation & Dask
+- **Objective:** Finalise scratch-directory isolation, enable WAL, introduce Dask path, and make CI green on Linux & Windows.
+- **Key Features:**
+  - Implemented nested-safe `TaskScratch` (idempotent cleanup logic).
+  - `Psi4Backend.calculate` now uses `with TaskScratch` for automatic cleanup on exceptions.
+  - Added `saptase/config.py` with `scratch_root`/`keep_scratch` defaults + env overrides.
+  - `LogDb` opens SQLite in **WAL** mode with 10 s busy-timeout; unit-test `test_logdb_wal` created.
+  - Dask executor path wraps backend in `TaskScratch`; upcoming tests will verify sentinel isolation.
+- **Documentation:**
+  - ADR-0005 updated to *Accepted*; added implementation notes.
+- **Tests:** All current tests pass; groundwork laid for Dask scratch tests.
+
+---
