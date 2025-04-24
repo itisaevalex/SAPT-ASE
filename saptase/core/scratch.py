@@ -56,7 +56,11 @@ class TaskScratch(contextlib.AbstractContextManager):
         self.root_path = Path(root).expanduser().resolve()
         self.dir_path = self.root_path / "saptase" / self.task_id
 
-        # Hold previous env to restore later
+        # Track whether *this* context created the directory so cleanup is
+        # idempotent when contexts are nested (backend + orchestrator).
+        self._created_here = not self.dir_path.exists()
+
+        # Hold previous env to restore later (per-context push/pop semantics)
         self._old_env: dict[str, Optional[str]] = {}
 
     # ---------------------------------------------------------------------
@@ -90,12 +94,15 @@ class TaskScratch(contextlib.AbstractContextManager):
             logger.debug("Keeping scratch dir for task %s at %s", self.task_id, self.dir_path)
             return False  # propagate exceptions, if any
 
+        # Only the *creator* removes directory when exiting – nested contexts leave
+        # cleanup responsibility to the outer-most.
         try:
-            shutil.rmtree(self.dir_path, ignore_errors=True)
-            # Also attempt to clean empty parent "saptase" folder (non-fatal)
-            parent = self.dir_path.parent
-            if parent.exists() and not any(parent.iterdir()):
-                parent.rmdir()
+            if self._created_here and not self.keep_scratch:
+                shutil.rmtree(self.dir_path, ignore_errors=True)
+                # Also attempt to clean empty parent "saptase" folder (non-fatal)
+                parent = self.dir_path.parent
+                if parent.exists() and not any(parent.iterdir()):
+                    parent.rmdir()
         except Exception as exc:  # pragma: no cover – never raise during cleanup
             logger.warning("Failed deleting scratch dir %s: %s", self.dir_path, exc)
 

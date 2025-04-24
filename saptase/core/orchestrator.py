@@ -21,6 +21,7 @@ from .backend import Psi4Backend, SaptBackend
 from .errors import SaptError  # Import base SaptError
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
+from saptase.config import EXECUTION  # scratch defaults
 from saptase.core.scratch import TaskScratch  # Import TaskScratch
 
 logger = logging.getLogger(__name__)
@@ -330,6 +331,13 @@ class SaptWorkflow:
         Args:
             task: The SAPT task to add
         """
+        # Inject scratch-related defaults if caller did not specify
+        if "scratch_root" not in task.additional_keywords and EXECUTION.scratch_root is not None:
+            task.additional_keywords["scratch_root"] = EXECUTION.scratch_root
+
+        if "keep_scratch" not in task.additional_keywords:
+            task.additional_keywords["keep_scratch"] = EXECUTION.keep_scratch
+
         self.tasks.append(task)
 
     def add_dimer(

@@ -19,6 +19,7 @@ except ImportError:
     psi4 = None  # pragma: no cover – allow running without Psi4
 
 from .models import SaptResult, SaptTask, TaskStatus
+from saptase.core.scratch import TaskScratch
 
 
 class SaptBackend(ABC):
@@ -171,8 +172,17 @@ class Psi4Backend(SaptBackend):
         # Create a result object with the task ID
         result = SaptResult(task_id=task.id)
 
-        # No internal TaskScratch – external orchestrator/tests should wrap if needed
+        # Inner TaskScratch context (idempotent) for robustness
+        keep_flag = task.additional_keywords.get("keep_scratch", False)
+        root_flag = task.additional_keywords.get("scratch_root")
 
+        with TaskScratch(task.id, scratch_root=root_flag, keep_scratch=keep_flag):
+            return self._calculate_inner(task, result)
+
+    # ------------------------------------------------------------------
+    # Actual heavy-lifting (split to keep outer context concise)
+    # ------------------------------------------------------------------
+    def _calculate_inner(self, task: SaptTask, result: SaptResult) -> SaptResult:
         try:
             # Update task status
             task.status = TaskStatus.RUNNING
