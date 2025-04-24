@@ -24,6 +24,12 @@ from .models import Molecule, SaptResult, SaptTask, TaskStatus
 
 logger = logging.getLogger(__name__)
 
+# Add conditional import for DaskExecutor – avoid ImportError during documentation build
+try:
+    from saptase.execution.dask import DaskExecutor
+except ImportError:  # pragma: no cover
+    DaskExecutor = None  # type: ignore
+
 
 def get_default_backend() -> SaptBackend:
     """Always instantiate the production backend.
@@ -523,6 +529,109 @@ class SaptWorkflow:
         )
         return self.results
 
+    def run_dask(
+        self,
+        max_workers: Optional[int] = None,
+        scheduler: Optional[str] = None,
+    ) -> Dict[str, SaptResult]:
+        """Run all pending tasks using Dask distributed.
+
+        This mirrors ``run_local_parallel`` but leverages a
+        ``dask.distributed.Client`` under the hood.  When ``scheduler`` is
+        ``None`` we spin up a local ``LocalCluster`` so the behaviour is the
+        same as the local multiprocessing path – just with the Dask
+        scheduler‑worker graph.  When a ``tcp://host:port`` address is
+        provided it is treated as an existing scheduler (e.g. on a SLURM
+        login node).
+
+        Args:
+            max_workers: Number of workers for a *new* LocalCluster. Ignored
+                when attaching to an external scheduler.
+            scheduler: Address of an existing scheduler.  ``None`` → self‑host.
+
+        Returns:
+            Final ``results`` dict identical to the other run_* methods.
+        """
+        if DaskExecutor is None:  # pragma: no cover – Dask not installed
+            raise RuntimeError(
+                "Dask execution requested but the optional 'dask.distributed' dependency is missing."
+            )
+
+        # Generate unique run_id (same logic as other run modes)
+        if not getattr(self, "current_run_id", None):
+            self.current_run_id = f"run_{uuid.uuid4().hex[:8]}"
+        logger.info(
+            "Starting Dask workflow run_id=%s, scheduler=%s", self.current_run_id, scheduler or "LocalCluster"
+        )
+
+        # Identify pending tasks
+        pending_tasks = [t for t in self.tasks if t.status == TaskStatus.PENDING]
+        if not pending_tasks:
+            logger.info("No pending tasks – nothing to do.")
+            return self.results
+
+        # Details dictionary for status mutation later
+        task_details = {t.id: t for t in self.tasks}
+
+        # ---- Launch / connect executor ----
+        executor = DaskExecutor(scheduler=scheduler, n_workers=max_workers)
+
+        # Map future → original id so we can aggregate identical to local path
+        future_to_task_id = {
+            executor.submit_task(
+                _execute_task_for_parallel,
+                self.backend,
+                task,
+                self.logdb.db_path,
+                self.current_run_id,
+            ): task.id
+            for task in pending_tasks
+        }
+
+        # Dask.as_completed gives Futures as they finish
+        try:
+            from dask.distributed import as_completed  # Local import to avoid hard dep when not used
+        except ImportError:  # pragma: no cover
+            raise RuntimeError("dask.distributed is required for run_dask")
+
+        results_list: List[SaptResult] = []
+        for fut in tqdm(as_completed(future_to_task_id), total=len(future_to_task_id)):
+            original_task_id = future_to_task_id[fut]
+            original_task = task_details.get(original_task_id)
+            try:
+                res: SaptResult = fut.result()
+                existing = self.results.get(original_task_id)
+                replace = (
+                    existing is None
+                    or (res.success and not existing.success)
+                    or (not res.success and not existing.success and res.attempt_number > existing.attempt_number)
+                )
+                if replace:
+                    self.results[original_task_id] = res
+                    results_list.append(res)
+                    if original_task:
+                        original_task.status = TaskStatus.COMPLETED if res.success else TaskStatus.FAILED
+            except Exception as exc:  # noqa: BLE001
+                logger.critical("Dask future for %s raised: %s", original_task_id, exc, exc_info=True)
+                fail_res = SaptResult(
+                    task_id=original_task_id,
+                    success=False,
+                    error_message=f"Exception in Dask future: {exc}",
+                    error_code=type(exc).__name__,
+                )
+                self.results.setdefault(original_task_id, fail_res)
+                results_list.append(fail_res)
+                if original_task:
+                    original_task.status = TaskStatus.FAILED
+                # Log at least once – do after setdefault to avoid duplicates
+                self.logdb.log_task_attempt(run_id=self.current_run_id, result=fail_res)
+
+        # Cleanup
+        executor.close()
+        self.logdb.close()
+        logger.info("Dask execution for run_id %s finished (%d tasks).", self.current_run_id, len(results_list))
+        return self.results
+
     def get_result(self, task_id: str) -> Optional[SaptResult]:
         """Get the result for a specific task.
 
@@ -603,3 +712,28 @@ def run_adaptive_workflow(
     )
     results = adaptive_workflow.run_adaptive(max_workers=max_workers)
     return results
+
+
+# -----------------------------------------------------------------------------
+# *Testing* helper – minimal backend so that tests can monkey‑patch it.
+# -----------------------------------------------------------------------------
+class MockBackend(SaptBackend):  # noqa: D101 – simple stub for unit‑tests only
+    """Extremely thin backend used solely by the test‑suite.
+
+    The real behaviour is provided by `monkeypatch` in ``tests/test_adaptive.py``
+    et al.  We just need a placeholder so that
+
+    ``monkeypatch.setattr('saptase.core.orchestrator.MockBackend', ...)``
+
+    works without raising *AttributeError* at import‑time.
+    """
+
+    def calculate(self, task: SaptTask) -> SaptResult:  # noqa: D401 (simple verb OK)
+        result = SaptResult(task_id=task.id)
+        result.success = False
+        result.error_message = (
+            "MockBackend placeholder was called unexpectedly – tests are supposed"
+            " to patch this with a fully‑featured implementation."
+        )
+        task.status = TaskStatus.FAILED
+        return result
