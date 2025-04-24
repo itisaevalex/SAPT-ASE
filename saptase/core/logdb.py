@@ -11,6 +11,10 @@ from .models import SaptResult
 
 logger = logging.getLogger(__name__)
 
+# Connections are opened in *Write-Ahead Logging* (WAL) mode via PRAGMA below.
+# This is safe for multi-process concurrency on a single node and improves
+# writer throughput compared to the default rollback journal.
+
 # Define the database schema version (for potential future migrations)
 SCHEMA_VERSION = "0.1"
 

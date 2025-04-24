@@ -12,12 +12,13 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
-from .models import SaptResult, SaptTask, TaskStatus
-
+# Optional import of Psi4 (for tests we monkeypatch)
 try:
-    import psi4
+    import psi4  # type: ignore
 except ImportError:
-    psi4 = None  # Allow running the module without Psi4 installed
+    psi4 = None  # pragma: no cover – allow running without Psi4
+
+from .models import SaptResult, SaptTask, TaskStatus
 
 
 class SaptBackend(ABC):
@@ -169,6 +170,8 @@ class Psi4Backend(SaptBackend):
         """
         # Create a result object with the task ID
         result = SaptResult(task_id=task.id)
+
+        # No internal TaskScratch – external orchestrator/tests should wrap if needed
 
         try:
             # Update task status

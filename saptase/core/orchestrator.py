@@ -21,6 +21,7 @@ from .backend import Psi4Backend, SaptBackend
 from .errors import SaptError  # Import base SaptError
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
+from saptase.core.scratch import TaskScratch  # Import TaskScratch
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +141,13 @@ def _execute_task_for_parallel(
         current_attempt_start_time = time.monotonic()  # Time this specific attempt
 
         try:
-            # --- Execute Calculation ---
-            task_result = backend.calculate(
-                task
-            )  # Assume backend handles its own status logging if needed
+            # --- Execute Calculation within task-specific scratch dir ---
+            keep_scratch_flag = task.additional_keywords.get("keep_scratch", False)
+            scratch_root_flag = task.additional_keywords.get("scratch_root")
+
+            with TaskScratch(task.id, scratch_root=scratch_root_flag, keep_scratch=keep_scratch_flag):
+                task_result = backend.calculate(task)
+
             elapsed_time = time.monotonic() - current_attempt_start_time
 
             # --- Process Success ---
