@@ -24,12 +24,11 @@ jobs:
 
     - name: Convert .mmd to .svg
       run: |
-        find docs/thesis/figs -name '*.mmd' -print0 | \\
-          xargs -0 -I FILE sh -c '
-            outfile="${FILE%.*}.svg"
-            echo "Converting FILE to $outfile"
-            mmdc -i "$FILE" -o "$outfile"
-          '
+        find docs/thesis/figs -name '*.mmd' -print0 | xargs -0 -I FILE sh -c '
+          outfile="${FILE%.*}.svg";
+          echo "Converting $FILE to $outfile";
+          mmdc -i "$FILE" -o "$outfile";
+        '
 
     #------------------------------------------------------------
     # 2) Compile LaTeX with latexmk inside a full TeX Live image
