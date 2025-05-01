@@ -34,7 +34,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     env:
-      SAPTASE_SCRATCH_ROOT: ${{ runner.temp }}/saptase
+      SAPTASE_SCRATCH_ROOT: ${{ runner.temp_directory }}/saptase
     strategy:
       matrix:
         python-version: ['3.10', '3.11']
@@ -90,7 +90,7 @@ jobs:
   #       pytest -v
 
   stress:
-    if: ${{ env.RUN_STRESS == 'true' }} # Checks workflow-level env.RUN_STRESS
+    if: ${{ vars.RUN_STRESS == 'true' }} # Use vars for workflow-level variables
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
