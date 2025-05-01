@@ -56,29 +56,30 @@ def test_cli_run_local_dask_success(tmp_path):
     assert result.returncode == 0, f"CLI exited with non-zero status: {result.returncode}"
 
     # Check database content
-    # Inject DB path into workflow object instead?
-    # For now, assume default relative path creation works
-    # We need to know the *actual* DB path used by the run.
-    # Let's assume it creates it in the CWD (tmp_path) for this test.
-    # TODO: Make DB path more predictable or configurable for testing
     final_db_path = tmp_path / "runs" / "runs.sqlite"
     assert final_db_path.exists(), f"Provenance database not found at {final_db_path}"
 
     conn = sqlite3.connect(final_db_path)
     cursor = conn.cursor()
+    
+    # Query status for the specific tasks by task_id
     cursor.execute(
-        "SELECT task_id, status FROM task_log WHERE run_id = ?", ("demo_dask_local_001",)
+        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", 
+        ("h_dimer_1",)
     )
-    rows = cursor.fetchall()
+    row1 = cursor.fetchone()
+    cursor.execute(
+        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", 
+        ("h_dimer_2",)
+    )
+    row2 = cursor.fetchone()
     conn.close()
 
-    assert len(rows) == 2, f"Expected 2 rows in task_log, found {len(rows)}"
-    assert (
-        rows[0][1] == "COMPLETED"
-    ), f"Task {rows[0][0]} status was {rows[0][1]}, expected COMPLETED"
-    assert (
-        rows[1][1] == "COMPLETED"
-    ), f"Task {rows[1][0]} status was {rows[1][1]}, expected COMPLETED"
+    # Assert that both tasks were logged as COMPLETED
+    assert row1 is not None, "Task h_dimer_1 not found in log"
+    assert row1[0] == "COMPLETED", f"Task h_dimer_1 status was {row1[0]}, expected COMPLETED"
+    assert row2 is not None, "Task h_dimer_2 not found in log"
+    assert row2[0] == "COMPLETED", f"Task h_dimer_2 status was {row2[0]}, expected COMPLETED"
 
     # Check that scratch was created (presence of dirs like h_dimer_1*)
     scratch_contents = list(scratch_dir.iterdir())

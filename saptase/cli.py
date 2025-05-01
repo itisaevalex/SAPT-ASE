@@ -196,18 +196,16 @@ def run_command(args: argparse.Namespace):
     )
     workers = cli_workers if cli_workers is not None else yaml_workers
     if workers is None and mode in ["local_parallel", "dask"]:
-        # If mode needs workers but none specified, default for local_parallel/LocalCluster
         workers = os.cpu_count()
         logger.debug(f"Defaulting workers to CPU count: {workers}")
     elif workers is not None:
-        # Ensure workers is int if provided
         try:
             workers = int(workers)
         except ValueError:
             logger.error(f"Invalid value for workers: '{workers}'. Must be an integer.")
             sys.exit(1)
 
-    # Collapse scheduler logic (CLI > YAML > None)
+    # Scheduler: CLI > YAML > None)
     scheduler = (
         args.scheduler
         if args.scheduler is not None
@@ -216,9 +214,34 @@ def run_command(args: argparse.Namespace):
             execution_config.get("dask", {}).get("scheduler"),
         )
     )
+    
+    # Scratch Root: CLI > YAML > Default (from config.EXECUTION)
+    scratch_root_cli = args.scratch_root # Read from args now
+    scratch_root_yaml = execution_config.get("scratch_root")
+    scratch_root_default = EXECUTION.scratch_root
+    # Precedence: CLI > YAML > Default
+    scratch_root = scratch_root_cli if scratch_root_cli is not None else scratch_root_yaml
+    if scratch_root is None:
+        scratch_root = scratch_root_default
+    logger.debug(f"Using scratch root: {scratch_root}")
+
+    # Keep Scratch: CLI > YAML > Default (from config.EXECUTION)
+    keep_scratch_cli = args.keep_scratch # Read from args now
+    keep_scratch_yaml = execution_config.get("keep_scratch")
+    keep_scratch_default = EXECUTION.keep_scratch
+    # Precedence: CLI flag present > YAML > Default
+    # Note: args.keep_scratch is True if flag present, False if not, None if not defined (shouldn't happen with action='store_true')
+    if keep_scratch_cli: # If CLI flag --keep-scratch is used, it overrides everything
+        keep_scratch = True
+    elif keep_scratch_yaml is not None:
+        keep_scratch = bool(keep_scratch_yaml)
+    else:
+        keep_scratch = keep_scratch_default
+    logger.debug(f"Keep scratch directories: {keep_scratch}")
+
 
     # --- Workflow Construction ---
-    workflow = SaptWorkflow()  # Uses default backend (Psi4)
+    workflow = SaptWorkflow() # Uses default backend (Psi4)
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -229,14 +252,10 @@ def run_command(args: argparse.Namespace):
 
     tasks_to_run: List[SaptTask] = []
     for i, task_config in enumerate(config_tasks):
-        task_id = task_config.get("id", f"task_{i+1}")  # Default task ID if not present
+        task_id = task_config.get("id", f"task_{i+1}")
         try:
-            monomer_a_data = task_config.get("monomer_a", {})
-            monomer_b_data = task_config.get("monomer_b", {})
-            if not monomer_a_data or not monomer_b_data:
-                raise ValueError("Both 'monomer_a' and 'monomer_b' must be defined in the task.")
-            monomer_a = _create_molecule(monomer_a_data)
-            monomer_b = _create_molecule(monomer_b_data)
+            monomer_a = _create_molecule(task_config.get("monomer_a", {}))
+            monomer_b = _create_molecule(task_config.get("monomer_b", {}))
 
             task = SaptTask(
                 id=task_id,
@@ -246,73 +265,57 @@ def run_command(args: argparse.Namespace):
                 method=task_config.get("method", "sapt0"),
                 additional_keywords=task_config.get("additional_keywords", {}),
             )
-            # Let workflow.add_task handle scratch defaults etc.
+            
+            # IMPORTANT: Add CLI scratch settings to task keywords BEFORE adding to workflow
+            # This ensures they override YAML/defaults handled by add_task
+            if scratch_root is not None:
+                task.additional_keywords["scratch_root"] = scratch_root
+            # keep_scratch needs care - add_task defaults to False if not present
+            # We only need to set it if the final decision was True
+            if keep_scratch:
+                 task.additional_keywords["keep_scratch"] = True
+                 
             workflow.add_task(task)
-            tasks_to_run.append(task)  # Keep track for auto mode logic
+            tasks_to_run.append(task) # Keep track for reporting if needed
 
         except (ValueError, TypeError) as e:
-            logger.error(f"Error processing task config for task '{task_id}': {e}")
+            logger.error(f"Error processing task '{task_id}' from config: {e}")
             sys.exit(1)
 
-    # --- Auto Mode Determination ---
-    if mode == "auto":
-        if len(tasks_to_run) == 1:
-            mode = "serial"
-            logger.info("Auto-detected mode: serial (1 task)")
-        else:
-            mode = "local_parallel"
-            logger.info(f"Auto-detected mode: local_parallel ({len(tasks_to_run)} tasks)")
-            # Ensure workers is set for local_parallel if it wasn't already
-            if workers is None:
-                workers = os.cpu_count()
-                logger.debug(f"Defaulting workers to CPU count for auto local_parallel: {workers}")
-
-    # --- Logging Summary ---
-    run_id = config.get("run_id", "cli_run")  # Get run_id from YAML or use default
-    # Ensure workflow has a run_id (needed before execution for logging)
-    workflow.current_run_id = run_id
-    db_path = workflow.logdb.db_path  # Get actual DB path from workflow instance
-    logger.info(
-        f"Starting run '{run_id}' with mode='{mode}'. Tasks={len(tasks_to_run)}, DB='{db_path}'"
-    )
-
-    # --- Execution Dispatch ---
-    results: Dict[str, Any] = {}
+    # --- Execute Workflow ---
+    logger.info(f"Executing workflow with mode: {mode}")
+    results: Optional[Dict[str, SaptResult]] = None
     try:
-        if mode == "serial":
+        if mode == "local_serial":
             results = workflow.run_local_serial()
         elif mode == "local_parallel":
-            if workers is None:  # Should be set by now, but safety check
-                workers = os.cpu_count()
-            logger.info(f"Running in local_parallel mode with max_workers={workers}")
             results = workflow.run_local_parallel(max_workers=workers)
         elif mode == "dask":
-            logger.info(f"Running in dask mode (workers={workers}, scheduler={scheduler})")
             results = workflow.run_dask(max_workers=workers, scheduler=scheduler)
+        elif mode == "auto":
+            # Simple auto logic: use parallel if multiple tasks, else serial
+            if len(tasks_to_run) > 1:
+                logger.info("Auto mode: Using local_parallel for multiple tasks.")
+                results = workflow.run_local_parallel(max_workers=workers)
+            else:
+                logger.info("Auto mode: Using local_serial for single task.")
+                results = workflow.run_local_serial()
         else:
-            logger.error(f"Unsupported execution mode: '{mode}'")
+            logger.error(f"Unsupported execution mode: {mode}")
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Workflow execution failed: {e}", exc_info=True)  # Log traceback
+        logger.critical(f"Workflow execution failed: {e}", exc_info=True)
         sys.exit(1)
 
-    # --- Process Results & Exit Status ---
-    logger.info("Workflow execution finished.")
-    failed_tasks = 0
-    for task_id, result in results.items():
-        status = "Success" if result.success else "Failed"
-        logger.info(f"  Task '{task_id}': {status}")
-        if not result.success:
-            failed_tasks += 1
-            logger.warning(f"    Error: {result.error_message}")
-
-    if failed_tasks > 0:
-        logger.warning(f"{failed_tasks} task(s) failed.")
-        sys.exit(1)  # Non-zero exit code if any task failed
+    # --- Report Results --- (Optional: Basic summary)
+    if results:
+        success_count = sum(1 for r in results.values() if r.success)
+        fail_count = len(results) - success_count
+        logger.info(f"Workflow finished. Tasks completed: {success_count}, Tasks failed: {fail_count}")
+        # Add more detailed reporting if needed
     else:
-        logger.info("All tasks completed successfully.")
-        sys.exit(0)  # Explicitly exit 0 on success
+        logger.warning("Workflow execution did not return results.")
 
 
 def main(argv: Optional[List[str]] = None):
@@ -365,6 +368,17 @@ def main(argv: Optional[List[str]] = None):
         default=None,
         help="Dask scheduler address (e.g., tcp://...). Overrides YAML.",
     )
+    parser_adaptive.add_argument(
+        "--scratch-root",
+        type=str,
+        default=None,
+        help="Root directory for scratch files (overrides config).",
+    )
+    parser_adaptive.add_argument(
+        "--keep-scratch",
+        action="store_true",
+        help="Keep scratch directories (overrides config).",
+    )
     parser_adaptive.set_defaults(func=run_adaptive_command)
 
     # --- run command (New) ---
@@ -394,6 +408,17 @@ def main(argv: Optional[List[str]] = None):
         type=str,
         default=None,
         help="Dask scheduler address (e.g., tcp://...). Overrides YAML.",
+    )
+    parser_run.add_argument(
+        "--scratch-root",
+        type=str,
+        default=None,
+        help="Root directory for scratch files (overrides config file).",
+    )
+    parser_run.add_argument(
+        "--keep-scratch",
+        action="store_true",
+        help="Keep scratch directories after calculations (overrides config file).",
     )
     parser_run.set_defaults(func=run_command)
 

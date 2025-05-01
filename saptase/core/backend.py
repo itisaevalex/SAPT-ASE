@@ -95,6 +95,34 @@ class DummyBackend(SaptBackend):
         return result
 
 
+# --- Success Mock Backend (for CI_FAST mode) ---
+class SuccessMockBackend(SaptBackend):
+    """A mock backend that returns a *successful* dummy result.
+    
+    Used as a fallback in CI_FAST mode when the test-suite's MockBackend
+    cannot be imported, ensuring tests requiring a successful mock backend
+    can pass without needing Psi4 or the full test suite structure available.
+    """
+    def calculate(self, task: SaptTask) -> SaptResult:
+        logger.debug(f"SuccessMockBackend: Generating success result for task {task.id}")
+        result = SaptResult(task_id=task.id)
+        result.success = True
+        result.energies = { # Provide minimal energies to avoid downstream errors
+            "total": -0.001, 
+            "electrostatics": -0.001,
+            "exchange": 0.0,
+            "induction": 0.0,
+            "dispersion": 0.0,
+        }
+        # Add basis/method for potential logging/provenance consistency
+        result.basis_set = task.basis_set
+        result.method = task.method
+        result.elapsed_time = 0.1 # Simulate some time taken
+        result.attempt_number = 0 # Indicate it succeeded on first (mock) attempt
+        task.status = TaskStatus.COMPLETED
+        return result
+
+
 # Backend Factory
 def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> SaptBackend:
     """Factory function to get a SaptBackend instance.
