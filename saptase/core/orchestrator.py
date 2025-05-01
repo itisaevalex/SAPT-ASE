@@ -554,15 +554,15 @@ class SaptWorkflow:
         This mirrors ``run_local_parallel`` but leverages a
         ``dask.distributed.Client`` under the hood.  When ``scheduler`` is
         ``None`` we spin up a local ``LocalCluster`` so the behaviour is the
-        same as the local multiprocessing path – just with the Dask
-        scheduler‑worker graph.  When a ``tcp://host:port`` address is
+        same as the local multiprocessing path - just with the Dask
+        scheduler-worker graph.  When a ``tcp://host:port`` address is
         provided it is treated as an existing scheduler (e.g. on a SLURM
         login node).
 
         Args:
             max_workers: Number of workers for a *new* LocalCluster. Ignored
                 when attaching to an external scheduler.
-            scheduler: Address of an existing scheduler.  ``None`` → self‑host.
+            scheduler: Address of an existing scheduler.  ``None`` → self-host.
 
         Returns:
             Final ``results`` dict identical to the other run_* methods.
@@ -584,7 +584,7 @@ class SaptWorkflow:
         # Identify pending tasks
         pending_tasks = [t for t in self.tasks if t.status == TaskStatus.PENDING]
         if not pending_tasks:
-            logger.info("No pending tasks – nothing to do.")
+            logger.info("No pending tasks - nothing to do.")
             return self.results
 
         # Details dictionary for status mutation later
@@ -746,25 +746,25 @@ def run_adaptive_workflow(
 
 
 # -----------------------------------------------------------------------------
-# *Testing* helper – minimal backend so that tests can monkey‑patch it.
+# *Testing* helper – minimal backend so that tests can monkey-patch it.
 # -----------------------------------------------------------------------------
 class MockBackend(SaptBackend):
-    """Extremely thin backend used solely by the test‑suite.
+    """Extremely thin backend used solely by the test-suite.
 
     The real behaviour is provided by `monkeypatch` in ``tests/test_adaptive.py``
     et al.  We just need a placeholder so that
 
     ``monkeypatch.setattr('saptase.core.orchestrator.MockBackend', ...)``
 
-    works without raising *AttributeError* at import‑time.
+    works without raising *AttributeError* at import-time.
     """
 
     def calculate(self, task: SaptTask) -> SaptResult:
         result = SaptResult(task_id=task.id)
         result.success = False
         result.error_message = (
-            "MockBackend placeholder was called unexpectedly – tests are supposed"
-            " to patch this with a fully‑featured implementation."
+            "MockBackend placeholder was called unexpectedly - tests are supposed"
+            " to patch this with a fully-featured implementation."
         )
         task.status = TaskStatus.FAILED
         return result

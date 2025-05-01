@@ -1,13 +1,13 @@
-"""Thin wrapper around ``dask.distributed.Client`` to provide a *local‑parallel‑like*
+"""Thin wrapper around ``dask.distributed.Client`` to provide a *local-parallel-like*
 API for SAPTASE.
 
 Purpose
 -------
 The rest of the codebase (orchestrator, workflows) expects something that looks
 like a `concurrent.futures.Executor`: it needs a ``submit(fn, *args)`` returning
-Future‑like objects.  We *could* just re‑use ``Client`` directly, but wrapping it
+Future-like objects.  We *could* just re-use ``Client`` directly, but wrapping it
 lets us hide the logic of *create a LocalCluster OR connect to existing* and
-also cleanly close everything in a context manager.
+also cleanly close everything in a context manager.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ class DaskExecutor:
         Parameters
         ----------
         scheduler
-            ``None`` ⇒ spin up an *in‑process* ``LocalCluster``.  Otherwise the
+            ``None`` ⇒ spin up an *in-process* ``LocalCluster``.  Otherwise the
             address (``"tcp://hostname:8786"``) of an existing scheduler.
         n_workers
             Number of workers when creating a *new* LocalCluster.
@@ -78,7 +78,7 @@ class DaskExecutor:
                 import warnings
 
                 warnings.warn(
-                    f"Dask scheduler '{scheduler}' unreachable – falling back to LocalCluster, reason: {exc}",
+                    f"Dask scheduler '{scheduler}' unreachable - falling back to LocalCluster, reason: {exc}",
                     RuntimeWarning,
                 )
                 self._cluster = LocalCluster(

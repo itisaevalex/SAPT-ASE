@@ -44,10 +44,10 @@ class SaptBackend(ABC):
 # Dummy backend (used by tests that only need a *placeholder* backend instance
 # -----------------------------------------------------------------------------
 class DummyBackend(SaptBackend):
-    """A no‑op backend that never performs real calculations.
+    """A no-op backend that never performs real calculations.
 
-    It exists solely so that the test‑suite can request a *"mock"* backend via
-    :pyfunc:`get_backend` without us having to import the heavy‑weight
+    It exists solely so that the test-suite can request a *"mock"* backend via
+    :pyfunc:`get_backend` without us having to import the heavy-weight
     production `Psi4Backend` (or depend on test helper modules that live outside
     the library).  **Do not** use this in production code.
     """
@@ -56,7 +56,7 @@ class DummyBackend(SaptBackend):
         result = SaptResult(task_id=task.id)
         result.success = False
         result.error_message = (
-            "DummyBackend cannot execute real calculations – it is intended for" " test use only."
+            "DummyBackend cannot execute real calculations - it is intended for" " test use only."
         )
         task.status = TaskStatus.FAILED
         return result
@@ -84,8 +84,8 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
         psi4_memory = options.get("memory", "2GB")  # Default memory
         return Psi4Backend(memory=psi4_memory)
     elif backend_name_lower == "mock":
-        # Tests often monkey‑patch ``saptase.core.orchestrator.MockBackend``
-        # *before* calling ``get_backend('mock')``.  Import the class at call‑time
+        # Tests often monkey-patch ``saptase.core.orchestrator.MockBackend``
+        # *before* calling ``get_backend('mock')``.  Import the class at call-time
         # so we pick up whatever the test has injected.
         try:
             from saptase.core.orchestrator import MockBackend  # dynamic import
@@ -93,7 +93,7 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
             return MockBackend()
         except Exception:  # pragma: no cover – fallback when not patched
             # If for some reason the orchestrator has no MockBackend (or tests
-            # didn’t patch it), fall back to an inert implementation so that the
+            # didn't' patch it), fall back to an inert implementation so that the
             # caller still receives a valid ``SaptBackend`` instance.
             return DummyBackend()
     # Add elif clauses for CamCASP, SAPT2020 etc. when implemented
@@ -143,11 +143,11 @@ class Psi4Backend(SaptBackend):
         self.memory = memory
 
         if psi4 is None:
-            # Defer failure until ``calculate`` – this allows the test‑suite to
+            # Defer failure until ``calculate`` – this allows the test-suite to
             # patch in a mock ``psi4`` module *after* instantiation via
             # :pyfunc:`unittest.mock.patch`.
             logger.warning(
-                "Psi4 not found at import time – Psi4Backend will only work if a"
+                "Psi4 not found at import time - Psi4Backend will only work if a"
                 " compatible mock is injected before calculate() is called."
             )
             self._psi4_available = False
@@ -317,7 +317,7 @@ class Psi4Backend(SaptBackend):
             result.raw_output = raw_out
 
             # Store *raw Hartree* total energy under the canonical key "total" –
-            # unit‑tests rely on this.
+            # unit-tests rely on this.
             total_h: Optional[float] = None
 
             try:
@@ -329,7 +329,7 @@ class Psi4Backend(SaptBackend):
                     total_h = None
 
             if total_h is None:
-                # Fallback: sum per‑component kcal values (then convert back)
+                # Fallback: sum per-component kcal values (then convert back)
                 try:
                     kcal_sum = sum(v for k, v in result.energies.items() if k != "total")
                     total_h = kcal_sum / 627.509

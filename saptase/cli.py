@@ -6,15 +6,15 @@ Command-line interface for the SAPTASE workflow manager.
 import argparse
 import json
 import logging
-import os # For cpu_count
+import os  # For cpu_count
 import sys
 from typing import Any, Dict, List, Optional
 
 import numpy as np  # Needed for Molecule coordinates
 
-from .config import EXECUTION, load_config # Global scratch config + YAML loader
-from .core.models import Molecule, SaptTask, TaskStatus
-from .core.orchestrator import SaptWorkflow, run_adaptive_workflow # Add SaptWorkflow
+from .config import EXECUTION, load_config  # Global scratch config + YAML loader
+from .core.models import Molecule, SaptTask
+from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
 
 logger = logging.getLogger(__name__) # Use module-level logger
 
@@ -73,8 +73,6 @@ def run_adaptive_command(args: argparse.Namespace):
     # Extract options
     adaptive_options = config.get("adaptive", {})
     execution_config = config.get("execution", {})
-    # Extract execution details (handle potential None values from YAML)
-    mode = args.mode or execution_config.get("mode", "auto")
     # CLI workers override YAML workers only if CLI workers is provided
     cli_workers = args.workers
     yaml_workers = execution_config.get("workers", execution_config.get("dask", {}).get("n_workers"))
@@ -82,7 +80,6 @@ def run_adaptive_command(args: argparse.Namespace):
     # Same pattern for scheduler
     cli_scheduler = args.scheduler
     yaml_scheduler = execution_config.get("scheduler", execution_config.get("dask", {}).get("scheduler"))
-    scheduler = cli_scheduler if cli_scheduler is not None else yaml_scheduler
 
     backend_config = config.get("backend", {})
     backend_name = backend_config.get("name", "psi4")  # Default to psi4

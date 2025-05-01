@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import List
-import sys
-import subprocess
 
 import numpy as np
 import pytest
@@ -89,7 +89,8 @@ def test_dask_many_tasks_stress(tmp_path: Path):
 def test_cli_run_dask_stress(tmp_path):
     """Test running many tasks via CLI 'run --mode dask'."""
     N_TASKS = 100
-    db_path = tmp_path / "stress_cli.sqlite"
+    # F841: Remove unused variable
+    # db_path = tmp_path / "stress_cli.sqlite"
     scratch_dir = tmp_path / "scratch_cli"
     scratch_dir.mkdir()
 
@@ -130,7 +131,8 @@ tasks:
     # Command to run the CLI
     cmd = [
         sys.executable,
-        str(CLI_PATH), # Assumes CLI_PATH is defined globally in this file or imported
+        # F821: Define CLI_PATH (assuming it's same as in test_cli_run.py)
+        str(Path(__file__).parent.parent / "saptase" / "cli.py"),
         "run",
         str(stress_yaml_path),
         "--mode",

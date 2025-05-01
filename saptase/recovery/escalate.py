@@ -40,7 +40,7 @@ LADDER = [
         "error_type": ScfFailed,
         "strategy_func": recover_scf_failed_simple,
         "strategy_name": "recover_scf_failed_simple",
-        "description": "Add level‑shift, relax convergence",
+        "description": "Add level-shift, relax convergence",
     },
     # 3 – Memory oversubscription ⇒ request less memory
     {
@@ -236,7 +236,7 @@ class EscalationContext:
         Returns
         -------
         SaptTask
-            A **deep‑copied** task with the recovery modifications applied.
+            A **deep-copied** task with the recovery modifications applied.
 
         Raises
         ------

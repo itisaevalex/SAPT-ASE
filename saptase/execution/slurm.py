@@ -4,20 +4,23 @@ This thin wrapper creates a ``dask_jobqueue.SLURMCluster`` with sensible
 defaults and returns *both* the cluster object and a connected
 ``dask.distributed.Client`` so callers can immediately submit work.
 
-The dependency on *dask_jobqueue* is **optional** – if it is missing we raise
+The dependency on *dask_jobqueue* is **optional** - if it is missing we raise
 ``ImportError`` with a clear message that the user can install the extra with
-
-``pip install "dask_jobqueue"``.
+`pip install saptase[dask_jobqueue]`.
 """
 
 from __future__ import annotations
 
 from typing import Any, Tuple
+from typing import TYPE_CHECKING
 
 # NOTE: we purposely import inside the helper so that merely importing this
 # module does **not** require dask_jobqueue, allowing unit-tests to skip when
 # the optional dependency is absent.
 
+if TYPE_CHECKING:
+    from dask.distributed import Client
+    from dask_jobqueue import SLURMCluster
 
 def create_slurm_cluster(
     *,
@@ -60,12 +63,11 @@ def create_slurm_cluster(
     """
 
     try:
-        from dask.distributed import Client
         from dask_jobqueue import SLURMCluster  # type: ignore
     except ImportError as exc:  # pragma: no cover – optional dep missing
         raise ImportError(
             "The optional dependency 'dask_jobqueue' is required for SLURM support. "
-            'Install it via `pip install "dask_jobqueue"`.'
+            'Install it via `pip install saptase[dask_jobqueue]`.'
         ) from exc
 
     # Build kwargs – mapping names as *dask_jobqueue* expects.

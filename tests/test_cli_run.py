@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Helper to get path to CLI script
 CLI_PATH = Path(__file__).parent.parent / "saptase" / "cli.py"
 EXAMPLE_YAML_PATH = Path(__file__).parent.parent / "examples" / "dask_local_demo.yml"
@@ -20,7 +19,6 @@ def test_cli_run_local_dask_success(tmp_path):
     """Test running the dask_local_demo via CLI 'run' command."""
     db_dir = tmp_path / "rundb"
     db_dir.mkdir()
-    db_path = db_dir / "runs.sqlite"
     scratch_dir = tmp_path / "scratch"
     scratch_dir.mkdir()
 
@@ -78,4 +76,4 @@ def test_cli_run_local_dask_success(tmp_path):
     scratch_contents = list(scratch_dir.iterdir())
     assert len(scratch_contents) > 0, "Scratch directory appears empty"
     assert any(d.name.startswith("h_dimer_1") for d in scratch_contents), "h_dimer_1 scratch missing"
-    assert any(d.name.startswith("h_dimer_2") for d in scratch_contents), "h_dimer_2 scratch missing" 
+    assert any(d.name.startswith("h_dimer_2") for d in scratch_contents), "h_dimer_2 scratch missing"
