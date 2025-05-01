@@ -1,9 +1,12 @@
 """Backend implementations for SAPT calculations."""
 
 import logging
+import os  # Added for getenv
 import re
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, List, Optional
+from importlib import import_module  # Added for import_module
+from types import ModuleType  # Added for type hint
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from .errors import (
     BasisIncompatible,
@@ -22,6 +25,36 @@ except ImportError:
 from saptase.core.scratch import TaskScratch
 
 from .models import SaptResult, SaptTask, TaskStatus
+
+
+# --- Setup Logger --- #
+logger = logging.getLogger(__name__)
+
+
+# --- Helper for Conditional Psi4 Import ---
+def _maybe_import_psi4() -> Optional[ModuleType]:
+    """Return the real psi4 module unless CI_FAST=1 or it's not importable.
+
+    Checks the CI_FAST environment variable. If set to '1', 'true', or 'yes' (case-insensitive),
+    or if psi4 cannot be imported, returns None. Otherwise, returns the imported psi4 module.
+    """
+    ci_fast = os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}
+    if ci_fast:
+        logger.debug("CI_FAST=1 detected, skipping psi4 import.")
+        return None
+    try:
+        psi4_module = import_module("psi4")
+        logger.debug("Successfully imported psi4 module.")
+        return psi4_module
+    except ModuleNotFoundError:
+        logger.debug("psi4 module not found.")
+        return None
+    except Exception as e: # Catch other potential import errors
+        logger.warning(f"An unexpected error occurred during psi4 import: {e}")
+        return None
+
+# Optional import of Psi4 using the helper
+psi4 = _maybe_import_psi4()
 
 
 class SaptBackend(ABC):
@@ -103,9 +136,6 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
         raise ValueError(f"Unsupported backend: {backend_name}")
 
 
-# --- Setup Logger --- #
-logger = logging.getLogger(__name__)
-
 # --- Backend Implementations ---
 
 
@@ -142,20 +172,33 @@ class Psi4Backend(SaptBackend):
         """
         self.memory = memory
 
+        # Check availability based on the module-level variable defined by _maybe_import_psi4
         if psi4 is None:
-            # Defer failure until ``calculate`` – this allows the test-suite to
-            # patch in a mock ``psi4`` module *after* instantiation via
-            # :pyfunc:`unittest.mock.patch`.
-            logger.warning(
-                "Psi4 not found at import time - Psi4Backend will only work if a"
-                " compatible mock is injected before calculate() is called."
-            )
+            # Log appropriately based on whether CI_FAST was the reason
+            if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+                 logger.info("Psi4Backend initialized in CI_FAST mode. Actual psi4 calls will be skipped if psi4 is None.")
+            else:
+                 logger.warning(
+                     "Psi4 not found or failed to import. Psi4Backend calculations will fail unless a mock is injected."
+                 )
             self._psi4_available = False
         else:
             self._psi4_available = True
+            logger.debug(f"Psi4Backend initialized with psi4 version: {getattr(psi4, '__version__', 'unknown')}")
 
     def calculate(self, task: SaptTask) -> SaptResult:
         """Perform a SAPT calculation wrapped in a TaskScratch directory."""
+        # Check availability at the start of calculation, before scratch creation
+        if not self._psi4_available:
+            # Return a failure result immediately if psi4 wasn't loaded
+            err_msg = "Psi4 is not available or CI_FAST=1"
+            logger.error(f"Cannot execute task {task.id}: {err_msg}")
+            return SaptResult(
+                task_id=task.id,
+                success=False,
+                error_message=err_msg,
+                error_code="Psi4Unavailable",
+            )
 
         keep_flag = task.additional_keywords.get("keep_scratch", False)
         root_flag = task.additional_keywords.get("scratch_root")
@@ -174,7 +217,7 @@ class Psi4Backend(SaptBackend):
             # Update task status
             task.status = TaskStatus.RUNNING
 
-            # Initialize Psi4
+            # Initialize Psi4 (psi4 variable is guaranteed non-None here)
             psi4.core.clean()
             psi4.set_memory(self.memory)
             psi4.core.set_output_file("psi4_output.dat", False)

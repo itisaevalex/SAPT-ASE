@@ -30,27 +30,90 @@ class LogDb:
     def __init__(self, db_path: Path = Path("runs/runs.sqlite")):
         """Initialize and connect to the database.
 
+        Handles potential database corruption by renaming the corrupt file
+        and creating a new one.
+
         Args:
             db_path: Path to the SQLite database file.
         """
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
         self.conn: Optional[sqlite3.Connection] = None
         self.cursor: Optional[sqlite3.Cursor] = None
+
+        # Ensure parent directory exists
         try:
-            self.conn = sqlite3.connect(self.db_path, isolation_level=None)  # Autocommit
-            self.cursor = self.conn.cursor()
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.error(f"Failed to create directory for database {self.db_path.parent}: {e}")
+            # Cannot proceed without the directory
+            return
 
-            # Enable WAL mode and set busy-timeout for concurrency safety
-            self.cursor.execute("PRAGMA journal_mode=WAL;")
-            self.cursor.execute("PRAGMA busy_timeout=10000;")
-
-            self._initialize_db()
+        try:
+            # First connection attempt
+            self._connect_and_initialize()
             logger.info(f"Connected to provenance database: {self.db_path}")
-        except sqlite3.Error as e:
-            logger.error(f"Failed to connect to or initialize database {self.db_path}: {e}")
+
+        except sqlite3.DatabaseError as e:
+            # Check if it's the "malformed" error or similar corruption issue
+            if "malformed" in str(e).lower() or "corrupt" in str(e).lower():
+                logger.error(
+                    f"Database file {self.db_path} appears corrupt or malformed: {e}. Attempting recovery..."
+                )
+                backup_path = self.db_path.with_suffix(f"{self.db_path.suffix}.bak")
+                try:
+                    logger.warning(f"Renaming corrupt database to {backup_path}")
+                    self.db_path.rename(backup_path)
+                    # Second connection attempt (will create a new file)
+                    logger.info(f"Attempting to create a fresh database at {self.db_path}")
+                    self._connect_and_initialize()
+                    logger.info(f"Successfully created and connected to new database: {self.db_path}")
+                except OSError as rename_err:
+                    logger.critical(
+                        f"Failed to rename corrupt database {self.db_path} to {backup_path}: {rename_err}. Cannot log provenance.",
+                        exc_info=True
+                    )
+                    # Cannot proceed if rename fails
+                    self.conn = None
+                    self.cursor = None
+                except sqlite3.Error as second_conn_err:
+                    logger.critical(
+                        f"Failed to connect to or initialize new database {self.db_path} after corruption recovery: {second_conn_err}",
+                        exc_info=True
+                    )
+                    # Cannot proceed if second connection fails
+                    self.conn = None
+                    self.cursor = None
+            else:
+                # If it's a different DatabaseError, log critically and fail
+                logger.critical(
+                    f"Unexpected DatabaseError connecting to {self.db_path}: {e}",
+                    exc_info=True
+                )
+                self.conn = None
+                self.cursor = None
+        except sqlite3.Error as e: # Catch other potential sqlite3 errors
+            logger.critical(
+                f"Failed to connect to or initialize database {self.db_path}: {e}",
+                exc_info=True
+            )
             self.conn = None
             self.cursor = None
+
+    def _connect_and_initialize(self):
+        """Internal helper to connect and setup the DB."""
+        # Raises sqlite3.Error on failure
+        self.conn = sqlite3.connect(self.db_path, isolation_level=None)  # Autocommit
+        self.cursor = self.conn.cursor()
+
+        # Enable WAL mode and set busy-timeout for concurrency safety
+        self.cursor.execute("PRAGMA journal_mode=WAL;")
+        # Check if WAL mode was set successfully
+        journal_mode = self.cursor.execute("PRAGMA journal_mode;").fetchone()
+        if journal_mode and journal_mode[0].lower() != 'wal':
+            logger.warning(f"Could not enable WAL journal mode for {self.db_path}. Current mode: {journal_mode[0]}. Concurrency issues might occur.")
+
+        self.cursor.execute("PRAGMA busy_timeout=10000;")
+        self._initialize_db() # Create tables if needed
 
     def _initialize_db(self):
         """Create necessary tables and metadata if they don't exist."""

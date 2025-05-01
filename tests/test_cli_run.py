@@ -10,11 +10,13 @@ from pathlib import Path
 import pytest
 
 # Helper to get path to CLI script
-CLI_PATH = Path(__file__).parent.parent / "saptase" / "cli.py"
+# CLI_PATH is no longer needed for this test
+# CLI_PATH = Path(__file__).parent.parent / "saptase" / "cli.py"
 EXAMPLE_YAML_PATH = Path(__file__).parent.parent / "examples" / "dask_local_demo.yml"
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Subprocess testing differences on Windows")
+# Remove the skipif marker to enable the test on Windows
+# @pytest.mark.skipif(sys.platform == "win32", reason="Subprocess testing differences on Windows")
 def test_cli_run_local_dask_success(tmp_path):
     """Test running the dask_local_demo via CLI 'run' command."""
     db_dir = tmp_path / "rundb"
@@ -23,9 +25,9 @@ def test_cli_run_local_dask_success(tmp_path):
     scratch_dir.mkdir()
 
     # Command to run the CLI
+    # Use the entry point directly now
     cmd = [
-        sys.executable,  # Use the same python interpreter running pytest
-        str(CLI_PATH),
+        "saptase",  # Use the installed entry point
         "run",
         str(EXAMPLE_YAML_PATH),
         "--mode",

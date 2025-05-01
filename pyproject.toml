@@ -58,7 +58,7 @@ extend-exclude = [".venv", ".conda", "__pycache__"]
 
 [tool.ruff.lint]
 # Rules we still care about
-select = ["E", "F", "W", "RUF", "I"]  # keep basics + Ruff-specific & import sorter
+select = ["E", "F", "W", "RUF", "I", "TID252"]  # keep basics + Ruff-specific & import sorter + absolute import rule
 
 # Globally ignore style nits we don't want to fight right now
 ignore = [
