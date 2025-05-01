@@ -16,7 +16,8 @@ from .config import EXECUTION, load_config  # Global scratch config + YAML loade
 from .core.models import Molecule, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
 
-logger = logging.getLogger(__name__) # Use module-level logger
+logger = logging.getLogger(__name__)  # Use module-level logger
+
 
 def _create_molecule(mol_data: dict) -> Molecule:
     """Helper to create a Molecule object from config data."""
@@ -26,19 +27,19 @@ def _create_molecule(mol_data: dict) -> Molecule:
         return Molecule.from_xyz_string(mol_data)
     elif isinstance(mol_data, dict):
         # Handle dict-based definition (original logic or file path)
-        if "xyz" in mol_data: # XYZ string within dict
+        if "xyz" in mol_data:  # XYZ string within dict
             return Molecule.from_xyz_string(
                 mol_data["xyz"],
                 charge=mol_data.get("charge", 0),
-                multiplicity=mol_data.get("multiplicity", 1)
+                multiplicity=mol_data.get("multiplicity", 1),
             )
-        elif "file" in mol_data: # Path to XYZ file
-             return Molecule.from_xyz_file(
+        elif "file" in mol_data:  # Path to XYZ file
+            return Molecule.from_xyz_file(
                 mol_data["file"],
                 charge=mol_data.get("charge", 0),
-                multiplicity=mol_data.get("multiplicity", 1)
+                multiplicity=mol_data.get("multiplicity", 1),
             )
-        elif "symbols" in mol_data and "coordinates" in mol_data: # Explicit symbols/coords
+        elif "symbols" in mol_data and "coordinates" in mol_data:  # Explicit symbols/coords
             # Convert coordinates to numpy array
             coords = np.array(mol_data["coordinates"], dtype=float)
             if coords.ndim != 2 or coords.shape[1] != 3:
@@ -50,10 +51,10 @@ def _create_molecule(mol_data: dict) -> Molecule:
                 coordinates=coords,
                 charge=mol_data.get("charge", 0),
                 multiplicity=mol_data.get("multiplicity", 1),
-                name=mol_data.get("name")
+                name=mol_data.get("name"),
             )
         else:
-             raise ValueError("Molecule definition needs 'xyz', 'file', or 'symbols'/'coordinates'.")
+            raise ValueError("Molecule definition needs 'xyz', 'file', or 'symbols'/'coordinates'.")
     else:
         raise TypeError(f"Unexpected type for molecule data: {type(mol_data)}")
 
@@ -75,11 +76,15 @@ def run_adaptive_command(args: argparse.Namespace):
     execution_config = config.get("execution", {})
     # CLI workers override YAML workers only if CLI workers is provided
     cli_workers = args.workers
-    yaml_workers = execution_config.get("workers", execution_config.get("dask", {}).get("n_workers"))
+    yaml_workers = execution_config.get(
+        "workers", execution_config.get("dask", {}).get("n_workers")
+    )
     workers = cli_workers if cli_workers is not None else yaml_workers
     # Same pattern for scheduler
     cli_scheduler = args.scheduler
-    yaml_scheduler = execution_config.get("scheduler", execution_config.get("dask", {}).get("scheduler"))
+    yaml_scheduler = execution_config.get(
+        "scheduler", execution_config.get("dask", {}).get("scheduler")
+    )
 
     backend_config = config.get("backend", {})
     backend_name = backend_config.get("name", "psi4")  # Default to psi4
@@ -100,14 +105,14 @@ def run_adaptive_command(args: argparse.Namespace):
         )
 
     task_config = config_tasks[0]
-    task_id = task_config.get("id", "adaptive_task_1") # Default task ID if not present
+    task_id = task_config.get("id", "adaptive_task_1")  # Default task ID if not present
 
     try:
         # Updated to handle new _create_molecule logic
         monomer_a_data = task_config.get("monomer_a", {})
         monomer_b_data = task_config.get("monomer_b", {})
         if not monomer_a_data or not monomer_b_data:
-             raise ValueError("Both 'monomer_a' and 'monomer_b' must be defined in the task.")
+            raise ValueError("Both 'monomer_a' and 'monomer_b' must be defined in the task.")
         monomer_a = _create_molecule(monomer_a_data)
         monomer_b = _create_molecule(monomer_b_data)
     except (ValueError, TypeError) as e:
@@ -119,9 +124,9 @@ def run_adaptive_command(args: argparse.Namespace):
         id=task_id,
         monomer_a=monomer_a,
         monomer_b=monomer_b,
-        basis_set=task_config.get("basis_set", "jun-cc-pVDZ"), # Match model field name
+        basis_set=task_config.get("basis_set", "jun-cc-pVDZ"),  # Match model field name
         method=task_config.get("method", "sapt0"),  # Default method
-        additional_keywords=task_config.get("additional_keywords", {}), # Match model field name
+        additional_keywords=task_config.get("additional_keywords", {}),  # Match model field name
     )
 
     print(f"Prepared task '{sapt_task.id}' for adaptive workflow.")
@@ -133,7 +138,7 @@ def run_adaptive_command(args: argparse.Namespace):
             backend_name=backend_name,
             backend_options=backend_options,
             adaptive_options=adaptive_options,
-            max_workers=workers, # Use merged workers value
+            max_workers=workers,  # Use merged workers value
         )
     except Exception as e:
         print(f"\nError during adaptive workflow execution: {e}", file=sys.stderr)
@@ -152,7 +157,7 @@ def run_adaptive_command(args: argparse.Namespace):
             if final_result.success:
                 print("  Status: Success")
                 # Extract details if available in the result object itself
-                final_basis = getattr(final_result, 'basis_set', 'N/A')
+                final_basis = getattr(final_result, "basis_set", "N/A")
                 # Rung info might need dedicated field in SaptResult or parsing logic
                 # converged = getattr(final_result, 'convergence_achieved', 'N/A')
                 print(f"  Final Basis: {final_basis}")
@@ -162,7 +167,7 @@ def run_adaptive_command(args: argparse.Namespace):
                 print(energies_str)
             else:
                 print("  Status: Failed")
-                error_msg = getattr(final_result, 'error_message', 'Unknown error')
+                error_msg = getattr(final_result, "error_message", "Unknown error")
                 print(f"  Error: {error_msg}")
         else:
             print(f"Result for task ID '{sapt_task.id}' not found in output.")
@@ -190,27 +195,31 @@ def run_command(args: argparse.Namespace):
 
     # Workers: CLI > YAML (execution.workers or execution.dask.n_workers) > default (None)
     cli_workers = args.workers
-    yaml_workers = execution_config.get("workers", execution_config.get("dask", {}).get("n_workers"))
+    yaml_workers = execution_config.get(
+        "workers", execution_config.get("dask", {}).get("n_workers")
+    )
     workers = cli_workers if cli_workers is not None else yaml_workers
     if workers is None and mode in ["local_parallel", "dask"]:
         # If mode needs workers but none specified, default for local_parallel/LocalCluster
-         workers = os.cpu_count()
-         logger.debug(f"Defaulting workers to CPU count: {workers}")
+        workers = os.cpu_count()
+        logger.debug(f"Defaulting workers to CPU count: {workers}")
     elif workers is not None:
-         # Ensure workers is int if provided
-         try:
-             workers = int(workers)
-         except ValueError:
-              logger.error(f"Invalid value for workers: '{workers}'. Must be an integer.")
-              sys.exit(1)
+        # Ensure workers is int if provided
+        try:
+            workers = int(workers)
+        except ValueError:
+            logger.error(f"Invalid value for workers: '{workers}'. Must be an integer.")
+            sys.exit(1)
 
     # Scheduler: CLI > YAML (execution.scheduler or execution.dask.scheduler) > default (None)
     cli_scheduler = args.scheduler
-    yaml_scheduler = execution_config.get("scheduler", execution_config.get("dask", {}).get("scheduler"))
+    yaml_scheduler = execution_config.get(
+        "scheduler", execution_config.get("dask", {}).get("scheduler")
+    )
     scheduler = cli_scheduler if cli_scheduler is not None else yaml_scheduler
 
     # --- Workflow Construction ---
-    workflow = SaptWorkflow() # Uses default backend (Psi4)
+    workflow = SaptWorkflow()  # Uses default backend (Psi4)
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -221,12 +230,12 @@ def run_command(args: argparse.Namespace):
 
     tasks_to_run: List[SaptTask] = []
     for i, task_config in enumerate(config_tasks):
-        task_id = task_config.get("id", f"task_{i+1}") # Default task ID if not present
+        task_id = task_config.get("id", f"task_{i+1}")  # Default task ID if not present
         try:
             monomer_a_data = task_config.get("monomer_a", {})
             monomer_b_data = task_config.get("monomer_b", {})
             if not monomer_a_data or not monomer_b_data:
-                 raise ValueError("Both 'monomer_a' and 'monomer_b' must be defined in the task.")
+                raise ValueError("Both 'monomer_a' and 'monomer_b' must be defined in the task.")
             monomer_a = _create_molecule(monomer_a_data)
             monomer_b = _create_molecule(monomer_b_data)
 
@@ -240,7 +249,7 @@ def run_command(args: argparse.Namespace):
             )
             # Let workflow.add_task handle scratch defaults etc.
             workflow.add_task(task)
-            tasks_to_run.append(task) # Keep track for auto mode logic
+            tasks_to_run.append(task)  # Keep track for auto mode logic
 
         except (ValueError, TypeError) as e:
             logger.error(f"Error processing task config for task '{task_id}': {e}")
@@ -256,15 +265,17 @@ def run_command(args: argparse.Namespace):
             logger.info(f"Auto-detected mode: local_parallel ({len(tasks_to_run)} tasks)")
             # Ensure workers is set for local_parallel if it wasn't already
             if workers is None:
-                 workers = os.cpu_count()
-                 logger.debug(f"Defaulting workers to CPU count for auto local_parallel: {workers}")
+                workers = os.cpu_count()
+                logger.debug(f"Defaulting workers to CPU count for auto local_parallel: {workers}")
 
     # --- Logging Summary ---
-    run_id = config.get("run_id", "cli_run") # Get run_id from YAML or use default
+    run_id = config.get("run_id", "cli_run")  # Get run_id from YAML or use default
     # Ensure workflow has a run_id (needed before execution for logging)
     workflow.current_run_id = run_id
-    db_path = workflow.logdb.db_path # Get actual DB path from workflow instance
-    logger.info(f"Starting run '{run_id}' with mode='{mode}'. Tasks={len(tasks_to_run)}, DB='{db_path}'")
+    db_path = workflow.logdb.db_path  # Get actual DB path from workflow instance
+    logger.info(
+        f"Starting run '{run_id}' with mode='{mode}'. Tasks={len(tasks_to_run)}, DB='{db_path}'"
+    )
 
     # --- Execution Dispatch ---
     results: Dict[str, Any] = {}
@@ -272,8 +283,8 @@ def run_command(args: argparse.Namespace):
         if mode == "serial":
             results = workflow.run_local_serial()
         elif mode == "local_parallel":
-            if workers is None: # Should be set by now, but safety check
-                 workers = os.cpu_count()
+            if workers is None:  # Should be set by now, but safety check
+                workers = os.cpu_count()
             logger.info(f"Running in local_parallel mode with max_workers={workers}")
             results = workflow.run_local_parallel(max_workers=workers)
         elif mode == "dask":
@@ -284,7 +295,7 @@ def run_command(args: argparse.Namespace):
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Workflow execution failed: {e}", exc_info=True) # Log traceback
+        logger.error(f"Workflow execution failed: {e}", exc_info=True)  # Log traceback
         sys.exit(1)
 
     # --- Process Results & Exit Status ---
@@ -299,10 +310,10 @@ def run_command(args: argparse.Namespace):
 
     if failed_tasks > 0:
         logger.warning(f"{failed_tasks} task(s) failed.")
-        sys.exit(1) # Non-zero exit code if any task failed
+        sys.exit(1)  # Non-zero exit code if any task failed
     else:
         logger.info("All tasks completed successfully.")
-        sys.exit(0) # Explicitly exit 0 on success
+        sys.exit(0)  # Explicitly exit 0 on success
 
 
 def main(argv: Optional[List[str]] = None):
@@ -313,14 +324,14 @@ def main(argv: Optional[List[str]] = None):
         argv: Optional list of arguments (uses sys.argv if None).
     """
     # Setup basic logging for the CLI
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
     if argv is None:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
         description="SAPTASE: Automated Multi-Fidelity SAPT(DFT) Workflows.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter # Show defaults in help
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # Show defaults in help
     )
     subparsers = parser.add_subparsers(
         title="Commands", dest="command", required=True, help="Available commands"
@@ -329,8 +340,8 @@ def main(argv: Optional[List[str]] = None):
     # --- run-adaptive command ---
     parser_adaptive = subparsers.add_parser(
         "run-adaptive",
-        help="Run an adaptive basis set escalation workflow (legacy).", # Mark as legacy?
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        help="Run an adaptive basis set escalation workflow (legacy).",  # Mark as legacy?
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_adaptive.add_argument(
         "config_file", type=str, help="Path to the YAML configuration file."
@@ -339,11 +350,12 @@ def main(argv: Optional[List[str]] = None):
     parser_adaptive.add_argument(
         "--mode",
         choices=["auto", "serial", "local_parallel", "dask"],
-        default=None, # Default handled inside command
+        default=None,  # Default handled inside command
         help="Override execution mode specified in YAML file.",
     )
     parser_adaptive.add_argument(
-        "-w", "--workers",
+        "-w",
+        "--workers",
         type=int,
         default=None,
         help="Max workers (local) or workers/node (Dask LocalCluster). Overrides YAML.",
@@ -360,7 +372,7 @@ def main(argv: Optional[List[str]] = None):
     parser_run = subparsers.add_parser(
         "run",
         help="Run a standard SAPT workflow from a configuration file.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_run.add_argument(
         "job_file", type=str, help="Path to the YAML/JSON job configuration file."
@@ -368,11 +380,12 @@ def main(argv: Optional[List[str]] = None):
     parser_run.add_argument(
         "--mode",
         choices=["auto", "serial", "local_parallel", "dask"],
-        default=None, # Default handled inside command
+        default=None,  # Default handled inside command
         help="Override execution mode specified in YAML file.",
     )
     parser_run.add_argument(
-        "-w", "--workers",
+        "-w",
+        "--workers",
         type=int,
         default=None,
         help="Max workers (local) or workers/node (Dask LocalCluster). Overrides YAML.",
@@ -407,9 +420,9 @@ def main(argv: Optional[List[str]] = None):
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
-         # Catch argparse errors (like missing command) and exit gracefully
-         # Argparse already prints the error message.
-         sys.exit(e.code) # Propagate the exit code from argparse
+        # Catch argparse errors (like missing command) and exit gracefully
+        # Argparse already prints the error message.
+        sys.exit(e.code)  # Propagate the exit code from argparse
 
     # ------------------------------------------------------------------
     # Apply global CLI flags -> runtime config singleton BEFORE calling func

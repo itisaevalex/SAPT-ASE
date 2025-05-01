@@ -85,7 +85,9 @@ def test_dask_many_tasks_stress(tmp_path: Path):
 
 @pytest.mark.slow
 @pytest.mark.dask
-@pytest.mark.skipif(os.getenv("DASK_STRESS", "false").lower() != "true", reason="Set DASK_STRESS=true to run")
+@pytest.mark.skipif(
+    os.getenv("DASK_STRESS", "false").lower() != "true", reason="Set DASK_STRESS=true to run"
+)
 def test_cli_run_dask_stress(tmp_path):
     """Test running many tasks via CLI 'run --mode dask'."""
     N_TASKS = 100
@@ -97,7 +99,8 @@ def test_cli_run_dask_stress(tmp_path):
     # Create a minimal YAML for the stress test
     tasks_yaml = []
     for i in range(N_TASKS):
-        tasks_yaml.append(f"""
+        tasks_yaml.append(
+            f"""
 - id: stress_task_{i}
   monomer_a:
     xyz: |
@@ -111,7 +114,8 @@ def test_cli_run_dask_stress(tmp_path):
       H 0 0 {1.0 + i*0.1}
   basis_set: jun-cc-pVDZ # Mock backend ignores this
   method: sapt0
-""")
+"""
+        )
 
     stress_yaml_content = f"""
 run_id: cli_dask_stress_run
@@ -138,7 +142,7 @@ tasks:
         "--mode",
         "dask",
         "--workers",
-        "4", # Use a few workers
+        "4",  # Use a few workers
         "--scratch-root",
         str(scratch_dir),
         # Cannot directly override db_path via CLI yet, rely on CWD default?
@@ -149,7 +153,7 @@ tasks:
     # Execute the command
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = "1"
-    env["CI_FAST"] = "1" # Use mocks
+    env["CI_FAST"] = "1"  # Use mocks
     result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=tmp_path, env=env)
     end_time = time.time()
 
@@ -170,7 +174,10 @@ tasks:
 
     conn = sqlite3.connect(final_db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM task_log WHERE run_id = ? AND status = ?", ("cli_dask_stress_run", "COMPLETED"))
+    cursor.execute(
+        "SELECT COUNT(*) FROM task_log WHERE run_id = ? AND status = ?",
+        ("cli_dask_stress_run", "COMPLETED"),
+    )
     count = cursor.fetchone()[0]
     conn.close()
 

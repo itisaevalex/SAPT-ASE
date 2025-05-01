@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from dask.distributed import Client
     from dask_jobqueue import SLURMCluster
 
+
 def create_slurm_cluster(
     *,
     cores: int = 4,
@@ -67,7 +68,7 @@ def create_slurm_cluster(
     except ImportError as exc:  # pragma: no cover – optional dep missing
         raise ImportError(
             "The optional dependency 'dask_jobqueue' is required for SLURM support. "
-            'Install it via `pip install saptase[dask_jobqueue]`.'
+            "Install it via `pip install saptase[dask_jobqueue]`."
         ) from exc
 
     # Build kwargs – mapping names as *dask_jobqueue* expects.

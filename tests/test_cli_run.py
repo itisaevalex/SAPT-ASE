@@ -24,14 +24,14 @@ def test_cli_run_local_dask_success(tmp_path):
 
     # Command to run the CLI
     cmd = [
-        sys.executable, # Use the same python interpreter running pytest
+        sys.executable,  # Use the same python interpreter running pytest
         str(CLI_PATH),
         "run",
         str(EXAMPLE_YAML_PATH),
         "--mode",
-        "dask", # Explicitly test dask mode with local cluster
+        "dask",  # Explicitly test dask mode with local cluster
         "--workers",
-        "1", # Keep it minimal for unit test
+        "1",  # Keep it minimal for unit test
         # Override scratch root to use tmp_path for isolation
         "--scratch-root",
         str(scratch_dir),
@@ -64,16 +64,26 @@ def test_cli_run_local_dask_success(tmp_path):
 
     conn = sqlite3.connect(final_db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT task_id, status FROM task_log WHERE run_id = ?", ("demo_dask_local_001",))
+    cursor.execute(
+        "SELECT task_id, status FROM task_log WHERE run_id = ?", ("demo_dask_local_001",)
+    )
     rows = cursor.fetchall()
     conn.close()
 
     assert len(rows) == 2, f"Expected 2 rows in task_log, found {len(rows)}"
-    assert rows[0][1] == "COMPLETED", f"Task {rows[0][0]} status was {rows[0][1]}, expected COMPLETED"
-    assert rows[1][1] == "COMPLETED", f"Task {rows[1][0]} status was {rows[1][1]}, expected COMPLETED"
+    assert (
+        rows[0][1] == "COMPLETED"
+    ), f"Task {rows[0][0]} status was {rows[0][1]}, expected COMPLETED"
+    assert (
+        rows[1][1] == "COMPLETED"
+    ), f"Task {rows[1][0]} status was {rows[1][1]}, expected COMPLETED"
 
     # Check that scratch was created (presence of dirs like h_dimer_1*)
     scratch_contents = list(scratch_dir.iterdir())
     assert len(scratch_contents) > 0, "Scratch directory appears empty"
-    assert any(d.name.startswith("h_dimer_1") for d in scratch_contents), "h_dimer_1 scratch missing"
-    assert any(d.name.startswith("h_dimer_2") for d in scratch_contents), "h_dimer_2 scratch missing"
+    assert any(
+        d.name.startswith("h_dimer_1") for d in scratch_contents
+    ), "h_dimer_1 scratch missing"
+    assert any(
+        d.name.startswith("h_dimer_2") for d in scratch_contents
+    ), "h_dimer_2 scratch missing"
