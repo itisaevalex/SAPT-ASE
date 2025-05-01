@@ -8,7 +8,7 @@ SAPTASE is a Python framework for automating Symmetry-Adapted Perturbation Theor
 - Multi-fidelity approach (DMA and ML surrogates)
 - Integration with popular QC packages (Psi4, CamCASP, SAPT2020)
 
-## What’s new in 0.4.0?
+## What's new in 0.4.0?
 
 - Distributed execution via *Dask* (`--mode dask`).
 - Scratch isolation & WAL-backed provenance DB for multi-process safety.
@@ -87,6 +87,19 @@ Keep scratch for debugging:
 ```bash
 saptase run job.yml --mode dask --workers 4 --keep-scratch
 ```
+
+### Quick start (Local Dask)
+
+Run a simple demonstration using a *local* Dask cluster created automatically by the CLI:
+
+```bash
+# Run the example workflow which uses mode: dask and scheduler: null
+saptase run examples/dask_local_demo.yml
+# You can override the mode/workers via CLI flags if needed:
+# saptase run examples/dask_local_demo.yml --mode dask --workers 2
+```
+
+This uses the configuration defined in [`examples/dask_local_demo.yml`](./examples/dask_local_demo.yml). Note that **omitting the `scheduler` address** (either in the YAML's `execution.dask.scheduler` field or by not providing one via environment/CLI) instructs SAPTASE to automatically start and manage a temporary `dask.distributed.LocalCluster` for the duration of the run.
 
 ### Submitting to SLURM
 

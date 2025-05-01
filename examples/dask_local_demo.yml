@@ -1,0 +1,39 @@
+# examples/dask_local_demo.yml
+run_id: demo_dask_local_001          # free-form; appears in LogDb
+
+execution:
+  mode: dask                         # <- CLI --mode overrides this if given
+  dask:
+    scheduler: null                  # null = start LocalCluster
+    n_workers: 2                     # workers for LocalCluster
+  scratch:
+    root: ${SAPTASE_SCRATCH_ROOT:-}  # optional; fall back to env var or OS tmp
+    keep: false
+
+tasks:
+  - id: h_dimer_1
+    monomer_a:
+      xyz: |
+        1
+        H
+        H  0.0 0.0 0.0
+    monomer_b:
+      xyz: |
+        1
+        H
+        H  0.0 0.0 1.0
+    basis_set: jun-cc-pVDZ
+    method: sapt0
+  - id: h_dimer_2
+    monomer_a:
+      xyz: |
+        1
+        H
+        H  0.0 0.0 0.0
+    monomer_b:
+      xyz: |
+        1
+        H
+        H  0.0 0.0 2.0
+    basis_set: jun-cc-pVDZ
+    method: sapt0 

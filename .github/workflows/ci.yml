@@ -53,6 +53,17 @@ jobs:
       run: |
         pytest -v -m "not slow"
 
+    - name: Run CLI Dask smoke test
+      # Use mocks via CI_FAST=1, set OMP_NUM_THREADS just in case
+      # Continue on Windows due to potential dask port flakes
+      if: ${{ !cancelled() }} # Only run if previous steps succeeded
+      continue-on-error: ${{ matrix.os == 'windows-latest' }}
+      env:
+        OMP_NUM_THREADS: 1
+        CI_FAST: 1
+      run: |
+        python -m saptase.cli run examples/dask_local_demo.yml --mode dask
+
   # Optional job that tests with Psi4 (commented out for CI efficiency)
   # test-with-psi4:
   #   runs-on: ubuntu-latest
