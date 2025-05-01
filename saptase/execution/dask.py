@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from saptase.core.models import SaptTask
 
 logger = logging.getLogger(__name__)
 

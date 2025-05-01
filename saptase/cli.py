@@ -80,11 +80,6 @@ def run_adaptive_command(args: argparse.Namespace):
         "workers", execution_config.get("dask", {}).get("n_workers")
     )
     workers = cli_workers if cli_workers is not None else yaml_workers
-    # Same pattern for scheduler
-    cli_scheduler = args.scheduler
-    yaml_scheduler = execution_config.get(
-        "scheduler", execution_config.get("dask", {}).get("scheduler")
-    )
 
     backend_config = config.get("backend", {})
     backend_name = backend_config.get("name", "psi4")  # Default to psi4
@@ -211,12 +206,15 @@ def run_command(args: argparse.Namespace):
             logger.error(f"Invalid value for workers: '{workers}'. Must be an integer.")
             sys.exit(1)
 
-    # Scheduler: CLI > YAML (execution.scheduler or execution.dask.scheduler) > default (None)
-    cli_scheduler = args.scheduler
-    yaml_scheduler = execution_config.get(
-        "scheduler", execution_config.get("dask", {}).get("scheduler")
+    # Collapse scheduler logic (CLI > YAML > None)
+    scheduler = (
+        args.scheduler
+        if args.scheduler is not None
+        else execution_config.get(
+            "scheduler",
+            execution_config.get("dask", {}).get("scheduler"),
+        )
     )
-    scheduler = cli_scheduler if cli_scheduler is not None else yaml_scheduler
 
     # --- Workflow Construction ---
     workflow = SaptWorkflow()  # Uses default backend (Psi4)

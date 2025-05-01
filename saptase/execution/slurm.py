@@ -11,8 +11,7 @@ The dependency on *dask_jobqueue* is **optional** - if it is missing we raise
 
 from __future__ import annotations
 
-from typing import Any, Tuple
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Tuple
 
 # NOTE: we purposely import inside the helper so that merely importing this
 # module does **not** require dask_jobqueue, allowing unit-tests to skip when

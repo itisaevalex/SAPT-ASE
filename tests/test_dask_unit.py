@@ -1,6 +1,6 @@
-"""Unit tests for the Dask execution path using a *pure‑Python* mock backend.
+"""Unit tests for the Dask execution path using a *pure-Python* mock backend.
 
-We deliberately avoid Psi4 here – only check orchestration + Dask wiring.
+We deliberately avoid Psi4 here - only check orchestration + Dask wiring.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ scheduler_up = socket.socket().connect_ex(("localhost", 8786)) == 0
 @pytest.mark.dask
 @pytest.mark.skipif(not scheduler_up, reason="No scheduler running on :8786")
 def test_dask_execution_external_scheduler(monkeypatch, tmp_path):
-    """Pretend to connect to an external scheduler by monkey‑patching DaskExecutor."""
+    """Pretend to connect to an external scheduler by monkey-patching DaskExecutor."""
 
     # We replace DaskExecutor with a *fake* one that just calls ProcessPool underneath
     from saptase.execution import dask as dask_exec_mod
