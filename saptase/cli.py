@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np  # Needed for Molecule coordinates
 
 from .config import EXECUTION  # Global scratch config
-from .core.interop.yaml import load_config # YAML loader
+from .core.interop.yaml import load_config  # YAML loader
 from .core.models import Molecule, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
 
