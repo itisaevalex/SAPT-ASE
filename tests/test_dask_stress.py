@@ -10,6 +10,8 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import List
+import sys
+import subprocess
 
 import numpy as np
 import pytest
@@ -79,3 +81,95 @@ def test_dask_many_tasks_stress(tmp_path: Path):
         assert count == 100, f"Expected 100 log rows, found {count}"
     finally:
         con.close()
+
+
+@pytest.mark.slow
+@pytest.mark.dask
+@pytest.mark.skipif(os.getenv("DASK_STRESS", "false").lower() != "true", reason="Set DASK_STRESS=true to run")
+def test_cli_run_dask_stress(tmp_path):
+    """Test running many tasks via CLI 'run --mode dask'."""
+    N_TASKS = 100
+    db_path = tmp_path / "stress_cli.sqlite"
+    scratch_dir = tmp_path / "scratch_cli"
+    scratch_dir.mkdir()
+
+    # Create a minimal YAML for the stress test
+    tasks_yaml = []
+    for i in range(N_TASKS):
+        tasks_yaml.append(f"""
+- id: stress_task_{i}
+  monomer_a:
+    xyz: |
+      1
+      H
+      H 0 0 0
+  monomer_b:
+    xyz: |
+      1
+      H
+      H 0 0 {1.0 + i*0.1}
+  basis_set: jun-cc-pVDZ # Mock backend ignores this
+  method: sapt0
+""")
+
+    stress_yaml_content = f"""
+run_id: cli_dask_stress_run
+
+execution:
+  mode: dask # Default mode, will be overridden by CLI
+  dask:
+    n_workers: 4 # Default workers, can be overridden
+
+tasks:
+{"".join(tasks_yaml)}
+"""
+
+    stress_yaml_path = tmp_path / "stress_job.yml"
+    stress_yaml_path.write_text(stress_yaml_content)
+
+    # Command to run the CLI
+    cmd = [
+        sys.executable,
+        str(CLI_PATH), # Assumes CLI_PATH is defined globally in this file or imported
+        "run",
+        str(stress_yaml_path),
+        "--mode",
+        "dask",
+        "--workers",
+        "4", # Use a few workers
+        "--scratch-root",
+        str(scratch_dir),
+        # Cannot directly override db_path via CLI yet, rely on CWD default?
+        # Need to adjust if LogDb path is fixed
+    ]
+
+    start_time = time.time()
+    # Execute the command
+    env = os.environ.copy()
+    env["OMP_NUM_THREADS"] = "1"
+    env["CI_FAST"] = "1" # Use mocks
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=tmp_path, env=env)
+    end_time = time.time()
+
+    print("CLI STDOUT:")
+    print(result.stdout)
+    print("CLI STDERR:")
+    print(result.stderr)
+
+    assert result.returncode == 0, f"CLI stress test exited non-zero: {result.returncode}"
+
+    # Check runtime
+    duration = end_time - start_time
+    assert duration < 25, f"CLI Dask stress test took too long: {duration:.2f}s"
+
+    # Check database
+    final_db_path = tmp_path / "runs" / "runs.sqlite"
+    assert final_db_path.exists(), f"Provenance database not found at {final_db_path}"
+
+    conn = sqlite3.connect(final_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM task_log WHERE run_id = ? AND status = ?", ("cli_dask_stress_run", "COMPLETED"))
+    count = cursor.fetchone()[0]
+    conn.close()
+
+    assert count == N_TASKS, f"Expected {N_TASKS} completed tasks in DB, found {count}"

@@ -88,18 +88,15 @@ Keep scratch for debugging:
 saptase run job.yml --mode dask --workers 4 --keep-scratch
 ```
 
-### Quick start (Local Dask)
+### Local Dask demo
 
 Run a simple demonstration using a *local* Dask cluster created automatically by the CLI:
 
 ```bash
-# Run the example workflow which uses mode: dask and scheduler: null
-saptase run examples/dask_local_demo.yml
-# You can override the mode/workers via CLI flags if needed:
-# saptase run examples/dask_local_demo.yml --mode dask --workers 2
+saptase run examples/dask_local_demo.yml --mode dask # Explicitly request dask
 ```
 
-This uses the configuration defined in [`examples/dask_local_demo.yml`](./examples/dask_local_demo.yml). Note that **omitting the `scheduler` address** (either in the YAML's `execution.dask.scheduler` field or by not providing one via environment/CLI) instructs SAPTASE to automatically start and manage a temporary `dask.distributed.LocalCluster` for the duration of the run.
+This spins up an in-process LocalCluster and runs two dummy dimers using the configuration in [`examples/dask_local_demo.yml`](./examples/dask_local_demo.yml). The `--mode dask` flag ensures Dask execution, and since no `--scheduler` is provided, a local cluster is used.
 
 ### Submitting to SLURM
 

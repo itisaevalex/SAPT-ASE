@@ -34,7 +34,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     env:
-      SAPTASE_SCRATCH_ROOT: ${{ runner.temp_directory }}/saptase
+      SAPTASE_SCRATCH_ROOT: ${{ runner.temp }}/saptase
     strategy:
       matrix:
         python-version: ['3.10', '3.11']
