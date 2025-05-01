@@ -37,6 +37,7 @@ def test_cli_run_local_dask_success(tmp_path):
         # Override scratch root to use tmp_path for isolation
         "--scratch-root",
         str(scratch_dir),
+        "--keep-scratch", # Add flag to prevent scratch cleanup
     ]
 
     # Execute the command
@@ -82,11 +83,15 @@ def test_cli_run_local_dask_success(tmp_path):
     assert row2[0] == "COMPLETED", f"Task h_dimer_2 status was {row2[0]}, expected COMPLETED"
 
     # Check that scratch was created (presence of dirs like h_dimer_1*)
-    scratch_contents = list(scratch_dir.iterdir())
-    assert len(scratch_contents) > 0, "Scratch directory appears empty"
+    # The actual task scratch dirs are created inside a 'saptase' subdir
+    saptase_scratch_dir = scratch_dir / "saptase"
+    assert saptase_scratch_dir.exists(), f"Expected 'saptase' scratch subdirectory not found in {scratch_dir}"
+    
+    scratch_contents = list(saptase_scratch_dir.iterdir())
+    assert len(scratch_contents) > 0, f"Scratch subdirectory {saptase_scratch_dir} appears empty"
     assert any(
         d.name.startswith("h_dimer_1") for d in scratch_contents
-    ), "h_dimer_1 scratch missing"
+    ), f"h_dimer_1 scratch missing in {saptase_scratch_dir}"
     assert any(
         d.name.startswith("h_dimer_2") for d in scratch_contents
-    ), "h_dimer_2 scratch missing"
+    ), f"h_dimer_2 scratch missing in {saptase_scratch_dir}"
