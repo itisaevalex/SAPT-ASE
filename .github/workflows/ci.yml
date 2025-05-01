@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+env: # Workflow level environment variables
+  RUN_STRESS: 'false' # Default to false; can be overridden (e.g., by secrets/dispatch)
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -87,10 +90,8 @@ jobs:
   #       pytest -v
 
   stress:
-    if: ${{ env.RUN_STRESS == 'true' }}
+    if: ${{ env.RUN_STRESS == 'true' }} # Checks workflow-level env.RUN_STRESS
     runs-on: ubuntu-latest
-    env:
-      RUN_STRESS: ${{ env.RUN_STRESS }}
     steps:
       - uses: actions/checkout@v3
         with:
