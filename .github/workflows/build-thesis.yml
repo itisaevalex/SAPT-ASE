@@ -1,0 +1,64 @@
+# .github/workflows/build-thesis.yml
+name: thesis-build
+
+on:
+  push:
+    paths: [docs/thesis/**, .github/workflows/build-thesis.yml]
+  pull_request:
+    paths: [docs/thesis/**]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest          # free 2-core runner under GitHub Pro minutes
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    #------------------------------------------------------------
+    # 1) Render any Mermaid *.mmd diagrams to SVG before LaTeX
+    #------------------------------------------------------------
+    - name: Install mermaid-cli
+      run: npm install -g @mermaid-js/mermaid-cli
+
+    - name: Convert .mmd to .svg
+      run: |
+        find docs/thesis/figs -name '*.mmd' -print0 | \\
+          xargs -0 -I FILE sh -c '
+            outfile="${FILE%.*}.svg"
+            echo "Converting FILE to $outfile"
+            mmdc -i "$FILE" -o "$outfile"
+          '
+
+    #------------------------------------------------------------
+    # 2) Compile LaTeX with latexmk inside a full TeX Live image
+    #    (fast, zero-config, includes LuaLaTeX/xelatex etc.)
+    #------------------------------------------------------------
+    - name: Set up TeX Live
+      uses: teatimeguest/setup-texlive-action@v3   # ~400 MB but cached (see below)
+      with:
+        # Pick a minimal scheme then add needed pkgs to tlmgr if you prefer
+        scheme: full
+
+    # Optional – cache TL install between runs (saves ~2 min)
+    - name: Cache TeX Live
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/texlive
+        key: texlive-2024-full            # bump yearly
+
+    - name: Build PDF with latexmk
+      working-directory: docs/thesis
+      run: |
+        latexmk -pdf -interaction=nonstopmode -halt-on-error thesis.tex
+        latexmk -c                     # clean aux files (optional)
+
+    #------------------------------------------------------------
+    # 3) Upload the finished thesis.pdf
+    #------------------------------------------------------------
+    - name: Publish artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: thesis-pdf
+        path: docs/thesis/thesis.pdf 

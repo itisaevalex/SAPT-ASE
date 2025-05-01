@@ -1,0 +1,106 @@
+"""\documentclass[12pt, a4paper]{report}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc} % Input encoding
+\usepackage[T1]{fontenc}    % Font encoding
+\usepackage{amsmath}        % Math symbols
+\usepackage{graphicx}       % Include graphics
+\usepackage{hyperref}       % Create hyperlinks
+\usepackage[margin=1in]{geometry} % Page margins
+\usepackage{lipsum}         % Placeholder text
+
+% --- Title Page Information ---
+\title{Automated Multi-Fidelity SAPT(DFT) Workflows using SAPTASE}
+\author{Alex Isaev} % Replace with your actual name if different
+\date{\today}
+
+% --- Document Start ---
+\begin{document}
+
+% --- Title Page ---
+\maketitle
+
+% --- Abstract (Placeholder) ---
+\begin{abstract}
+\lipsum[1] % Placeholder abstract text
+\end{abstract}
+
+% --- Table of Contents ---
+\tableofcontents
+\newpage
+
+% --- Chapter 1: Introduction (Placeholder) ---
+\chapter{Introduction}
+\lipsum[2-3] % Placeholder introduction text
+
+% --- Chapter 2: The SAPTASE Framework ---
+\chapter{The SAPTASE Framework}
+\section{Architecture and Design}
+This chapter details the architecture and design decisions behind the SAPTASE framework, developed to automate complex Symmetry-Adapted Perturbation Theory (SAPT) calculations. The core goal was to create a robust, extensible, and user-friendly tool for computational chemistry research.
+
+\subsection{Core Data Models (ADR-0001)}
+The foundation of SAPTASE relies on clear and well-defined data structures for representing molecules, calculation tasks, and results. We chose Python dataclasses for their simplicity and type hinting capabilities.
+\begin{itemize}
+    \item \texttt{Molecule}: Represents molecular geometry, charge, and multiplicity. Includes methods for XYZ format conversion.
+    \item \texttt{SaptTask}: Encapsulates all parameters for a single SAPT calculation, including monomer definitions, basis set, method, and backend-specific keywords.
+    \item \texttt{SaptResult}: Stores the output of a calculation, including energy components, success status, error messages, and provenance metadata like timing and attempt number.
+\end{itemize}
+
+\subsection{Backend Abstraction (ADR-0001)}
+To support different quantum chemistry packages, a backend abstraction layer was designed using Python's abstract base classes (ABC).
+\begin{itemize}
+    \item \texttt{SaptBackend} (ABC): Defines the interface required for any computational backend.
+    \item \texttt{Psi4Backend}: The primary implementation, interfacing with the Psi4 package. Handles input generation, execution, and output parsing for SAPT calculations. Includes internal SCF recovery logic.
+    % Add placeholders for future backends if desired
+\end{itemize}
+
+\subsection{Workflow Orchestration (ADR-0001, ADR-0002, ADR-0005)}
+The \texttt{SaptWorkflow} class manages the execution of multiple \texttt{SaptTask} objects. Key execution modes were implemented progressively:
+\begin{itemize}
+    \item \textbf{Serial Execution}: Simple, sequential execution on a single core (\texttt{run\_local\_serial}).
+    \item \textbf{Local Parallel Execution (ADR-0002)}: Utilizes \texttt{concurrent.futures.ProcessPoolExecutor} for running tasks concurrently on multiple cores of a single machine (\texttt{run\_local\_parallel}). This bypasses the GIL and provides process isolation suitable for CPU-bound tasks like Psi4 calculations.
+    \item \textbf{Distributed Execution (ADR-0005)}: Leverages \texttt{dask.distributed} for scaling calculations across multiple nodes, typically on HPC clusters. Supports both automatic \texttt{LocalCluster} creation for development/testing and connection to external schedulers (e.g., via \texttt{dask\_jobqueue.SLURMCluster}) for production runs (\texttt{run\_dask}).
+\end{itemize}
+A central worker function (\texttt{\_execute\_task\_for\_parallel}) encapsulates the logic for running a single task attempt, including error handling and recovery.
+
+\section{Advanced Features}
+
+\subsection{Adaptive Basis Set Escalation (ADR-0003)}
+To balance accuracy and computational cost, an adaptive workflow (\texttt{AdaptiveWorkflow}) was implemented.
+\begin{itemize}
+    \item Uses a predefined ladder of basis sets (e.g., jun-cc-pVDZ $\rightarrow$ aug-cc-pVDZ $\rightarrow$ ...).
+    \item Iteratively runs calculations with increasingly larger basis sets from the ladder.
+    \item Checks the change in SAPT energy components against user-defined tolerances (\texttt{target\_accuracy}).
+    \item Stops when convergence criteria are met or a maximum ladder rung (\texttt{max\_rung}) is reached.
+\end{itemize}
+This automates finding a cost-effective basis set for a desired level of accuracy.
+
+\subsection{Error Handling and Recovery (ADR-0004)}
+Quantum chemistry calculations can fail for various reasons. SAPTASE implements a robust error recovery system:
+\begin{itemize}
+    \item \textbf{Typed Exceptions}: A hierarchy of specific exceptions (e.g., \texttt{ScfFailed}, \texttt{BasisIncompatible}, \texttt{MemoryExceeded}) inheriting from \texttt{SaptError}. Backends parse program output to raise these specific errors.
+    \item \textbf{Escalation Ladder}: A predefined sequence of recovery strategies (\texttt{saptase.recovery.escalate.LADDER}) ordered by likelihood of success (e.g., SCF tweaks, basis set changes, memory adjustments).
+    \item \textbf{Escalation Context}: The \texttt{EscalationContext} class manages the retry process for a task. It tracks attempts, selects the appropriate strategy from the ladder based on the error and attempt count, and applies modifications to a *copy* of the task for the retry attempt.
+    \item \textbf{Provenance}: All attempts (original and retries), including failures and recovery steps applied, are logged to an SQLite database (\texttt{LogDb}) for detailed auditing and debugging. The final result reported is the first successful attempt, or the last failure if all attempts are exhausted.
+\end{itemize}
+
+\subsection{Command-Line Interface}
+A command-line interface (\texttt{saptase/cli.py}) provides user access to the workflow functionalities. Key commands include:
+\begin{itemize}
+    \item \texttt{saptase run <job\_file.yml>}: Executes a standard workflow defined in the YAML file. Supports overriding execution mode (\texttt{--mode}), worker count (\texttt{--workers}), and Dask scheduler (\texttt{--scheduler}) via flags.
+    \item \texttt{saptase run-adaptive <config\_file.yml>}: Executes an adaptive basis set workflow.
+\end{itemize}
+
+\section{Implementation Details}
+Key implementation choices include the use of Python dataclasses, abstract base classes for extensibility, standard library tools like \texttt{concurrent.futures} for local parallelism, and the Dask library for distributed computing. Emphasis was placed on clear separation of concerns between data models, backend execution, workflow logic, and recovery mechanisms. Automated testing (\texttt{pytest}) and code quality checks (\texttt{ruff}, \texttt{black}) are integrated into the development process via pre-commit hooks and CI workflows.
+
+% --- Add more sections/chapters as needed ---
+% \chapter{Results}
+% \chapter{Conclusion}
+
+% --- Bibliography (Placeholder) ---
+%\bibliographystyle{plain}
+%\bibliography{references} % Assuming you have a references.bib file
+
+% --- Document End ---
+\end{document}"" 

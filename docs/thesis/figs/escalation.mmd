@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant W as Workflow
+    participant E as EscalationContext
+    participant B as Psi4Backend
+    W->>B: run(task₀)
+    B-->>W: ScfFailed
+    W->>E: handle(ScfFailed)
+    E->>B: run(task₀_retry₁) 

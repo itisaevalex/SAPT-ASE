@@ -1,0 +1,41 @@
+graph TD
+    subgraph User Facing
+        UI[API / SDK / CLI]
+    end
+
+    subgraph Core Logic
+        Orchestrator[Workflow Orchestrator (saptase.core.orchestrator)]
+        StateDB[(State Mgmt / Provenance<br/>SQLite DB)]
+        ErrorHandling{Error Handling /<br/>EscalationContext}
+    end
+    
+    subgraph Backend Abstraction
+        ABC(SaptBackend ABC) --> Psi4(Psi4Backend)
+        ABC --> CamCASP(CamCASP Backend<br/>(Future))
+        ABC --> SAPT2020(SAPT2020 Backend<br/>(Future))
+    end
+
+    subgraph Execution Layer
+        LocalSerial(Local Serial)
+        LocalParallel(Local Parallel<br/>concurrent.futures)
+        Distributed(Distributed<br/>Dask)
+    end
+
+    UI --> Orchestrator;
+    Orchestrator --> ABC;
+    Orchestrator <--> StateDB;
+    Orchestrator <--> ErrorHandling;
+    Orchestrator --> LocalSerial;
+    Orchestrator --> LocalParallel;
+    Orchestrator --> Distributed;
+    
+    Psi4 --> QC[Psi4 Quantum Chemistry]
+    CamCASP -.-> QCExt[External QC Code]
+    SAPT2020 -.-> QCExt
+
+    ErrorHandling -- Catches errors from --> Psi4;
+    ErrorHandling -- Catches errors from --> CamCASP;
+    ErrorHandling -- Catches errors from --> SAPT2020;
+    
+    style StateDB fill:#f9f,stroke:#333,stroke-width:2px
+    style ErrorHandling fill:#ff9,stroke:#333,stroke-width:2px 
