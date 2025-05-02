@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "tqdm>=4.60.0",
-    "ruamel.yaml>=0.17.0", # Added for config file parsing
+    "ruamel.yaml>=0.17,<0.19", # Updated version constraint
 ]
 dynamic = ["version"]
 
@@ -32,6 +32,9 @@ dynamic = ["version"]
 saptase = "saptase.cli:main"
 
 [project.optional-dependencies]
+cli = [
+    "ruamel.yaml>=0.17,<0.19", # Explicitly list for CLI usage
+]
 dev = [
     "pytest>=6.0.0",
     "pytest-cov>=2.12.0",

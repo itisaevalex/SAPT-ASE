@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import os
 import gc
+import asyncio
+from dask.distributed.utils import sync
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -123,7 +125,9 @@ class DaskExecutor:
                 self._cluster.close(timeout=10)
                 logger.debug(f"Closed owned Dask cluster: {self._cluster.scheduler_address}")
                 self._cluster = None
+                # Force garbage collection and allow async tasks to finish using Dask's sync
                 gc.collect()
+                sync(asyncio.sleep(0.2))
             except Exception as cluster_close_err:
                 logger.warning(
                     f"Error closing owned Dask cluster {self._cluster.scheduler_address}: {cluster_close_err}"

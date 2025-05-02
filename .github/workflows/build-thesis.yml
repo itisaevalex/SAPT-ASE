@@ -22,7 +22,7 @@ jobs:
     - name: Install mermaid-cli
       run: npm install -g @mermaid-js/mermaid-cli
 
-    - name: DEBUG - Show workflow file content on runner
+    - name: DEBUG – Show workflow file content on runner
       run: |
         echo "--- Workflow file content START ---"
         cat .github/workflows/build-thesis.yml
@@ -38,28 +38,28 @@ jobs:
           echo "Converting [$FILE] to [$outfile]"
           mmdc -i "$FILE" -o "$outfile" --puppeteerConfigFile mmdc-puppeteer-config.json
         done
-        rm mmdc-puppeteer-config.json # Clean up temp config file
+        rm mmdc-puppeteer-config.json   # Clean up temp config file
 
     #------------------------------------------------------------
-    # 2) Compile LaTeX with latexmk inside a full TeX Live image
-    #    (fast, zero-config, includes LuaLaTeX/xelatex etc.)
+    # 2) Compile LaTeX with latexmk inside a *small* TeX Live scheme
+    #    (brings pdflatex/xelatex/luatex binaries)
     #------------------------------------------------------------
     - name: Set up TeX Live
-      uses: teatimeguest/setup-texlive-action@v3   # ~400 MB but cached (see below)
+      uses: teatimeguest/setup-texlive-action@v3
       with:
-        # Explicitly install latexmk and a few common packages
+        scheme: small          # <-- brings engine binaries
         packages: |
           latexmk
           amsmath
           amsfonts
-          lm # Latin Modern fonts
+          lm   # Latin Modern fonts
 
-    # Optional – cache TL install between runs (saves ~2 min)
+    # Optional – cache TL install between runs (saves ~2 min if unchanged)
     - name: Cache TeX Live
       uses: actions/cache@v4
       with:
         path: /usr/local/texlive
-        key: texlive-2024-full            # bump yearly
+        key: texlive-2024-small          # bump yearly
 
     - name: Build PDF with latexmk
       working-directory: docs/thesis
@@ -74,4 +74,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: thesis-pdf
-        path: docs/thesis/thesis.pdf 
+        path: docs/thesis/thesis.pdf

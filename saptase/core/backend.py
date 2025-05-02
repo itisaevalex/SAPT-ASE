@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from importlib import import_module  # Added for import_module
 from types import ModuleType  # Added for type hint
 from typing import Any, ClassVar, Dict, List, Optional, Union
+import sys
 
 from .errors import (
     BasisIncompatible,
@@ -201,30 +202,44 @@ class Psi4Backend(SaptBackend):
             memory: Memory allocation for Psi4
         """
         self.memory = memory
-
-        # Check availability based on the module-level variable defined by _maybe_import_psi4
+        # Initial check for logging purposes, but calculate will re-verify
         if psi4 is None:
-            # Log appropriately based on whether CI_FAST was the reason
             if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
                 logger.info(
-                    "Psi4Backend initialized in CI_FAST mode. Actual psi4 calls will be skipped if psi4 is None."
+                    "Psi4Backend initialized in CI_FAST mode. Actual psi4 calls might be skipped."
                 )
             else:
                 logger.warning(
-                    "Psi4 not found or failed to import. Psi4Backend calculations will fail unless a mock is injected."
+                    "Psi4 not found or failed to import during init. Availability will be checked again at calculation time."
                 )
-            self._psi4_available = False
         else:
-            self._psi4_available = True
             logger.debug(
-                f"Psi4Backend initialized with psi4 version: {getattr(psi4, '__version__', 'unknown')}"
+                f"Psi4Backend initialized with detected psi4 version: {getattr(psi4, '__version__', 'unknown')}"
             )
+        # Note: We no longer store _psi4_available flag here.
+
+    def _has_psi4(self) -> bool:
+        """True if a working psi4 module is in sys.modules *and* CI_FAST != 1."""
+        if os.getenv("CI_FAST") == "1":
+            return False
+        # Check sys.modules directly to see if a potentially mocked psi4 exists
+        if "psi4" in sys.modules and sys.modules["psi4"] is not None:
+             # Basic check: Does it look like a module or a mock?
+             # This might need refinement depending on how mocks are structured.
+             # For now, assume its presence means it's usable (or mocked).
+            return True
+        # If not in sys.modules, try importing again (covers cases where it wasn't available at init)
+        try:
+            import psi4  # noqa: F401 - Re-import attempt
+            return True
+        except Exception:
+            return False
 
     def calculate(self, task: SaptTask) -> SaptResult:
         """Perform a SAPT calculation wrapped in a TaskScratch directory."""
-        # Check availability at the start of calculation, before scratch creation
-        if not self._psi4_available:
-            # Return a failure result immediately if psi4 wasn't loaded
+        # Check availability at the start of calculation using the lazy helper
+        if not self._has_psi4():
+            # Return a failure result immediately if psi4 isn't available/mocked
             err_msg = "Psi4 is not available or CI_FAST=1"
             logger.error(f"Cannot execute task {task.id}: {err_msg}")
             return SaptResult(

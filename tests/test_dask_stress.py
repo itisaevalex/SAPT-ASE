@@ -10,6 +10,9 @@ import sqlite3
 import subprocess
 import sys
 import time
+import gc  # Added for garbage collection
+import asyncio # Added for sleep
+from dask.distributed.utils import sync # Added for Dask sync
 from pathlib import Path
 from typing import List
 
@@ -62,6 +65,9 @@ def test_dask_many_tasks_stress(tmp_path: Path):
     with LocalCluster(n_workers=4, threads_per_worker=1, asynchronous=False) as cluster:
         with Client(cluster):
             wf.run_dask(max_workers=4)
+    # Ensure cluster is fully cleaned up before leak check
+    gc.collect()
+    sync(asyncio.sleep(0.2)) # Use Dask sync and slightly longer sleep
     runtime = time.perf_counter() - t0
 
     # Assert time budget (should be < 20 s easily)
