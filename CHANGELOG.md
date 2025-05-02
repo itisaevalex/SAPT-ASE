@@ -42,6 +42,7 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fixed Dask `LocalCluster` leaks detected by the `assert_no_leaked_dask_cluster` fixture by ensuring `saptase.execution.dask.DaskExecutor` is used as a context manager in `saptase/core/orchestrator.py::run_dask`.
 - Corrected assertions in `tests/test_cli_run.py::test_cli_run_local_dask_success` to check the database by `task_id` instead of `run_id` and to check the correct scratch subdirectory path.
 - Added `--keep-scratch` flag to the CLI command in `test_cli_run_local_dask_success` to prevent premature deletion of scratch directories needed for assertions.
+- Resolved intermittent Dask `LocalCluster` leaks reported by test fixtures (`assert_no_leaked_dask_cluster`, `assert_no_cluster_leak_per_test`) by ensuring `DaskExecutor.close` explicitly drops cluster/client references and calls `gc.collect()`.
 
 ---
 
