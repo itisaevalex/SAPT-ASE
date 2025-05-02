@@ -67,7 +67,9 @@ def test_dask_many_tasks_stress(tmp_path: Path):
             wf.run_dask(max_workers=4)
     # Ensure cluster is fully cleaned up before leak check
     gc.collect()
-    sync(asyncio.sleep(0.2)) # Use Dask sync and slightly longer sleep
+    loop = asyncio.get_event_loop() # Get loop
+    # Use standard asyncio run_until_complete
+    loop.run_until_complete(asyncio.sleep(0.2))
     runtime = time.perf_counter() - t0
 
     # Assert time budget (should be < 20 s easily)

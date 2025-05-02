@@ -117,20 +117,25 @@ class DaskExecutor:
             logger.warning(f"Error closing Dask client: {client_close_err}")
 
         if self._cluster is not None:
+            # Store address before potential errors/setting to None
+            cluster_addr = self._cluster.scheduler_address
             logger.debug(
-                f"Attempting to close owned Dask cluster: {self._cluster.scheduler_address}"
+                f"Attempting to close owned Dask cluster: {cluster_addr}"
             )
             try:
                 # Close the cluster synchronously, waiting for workers
                 self._cluster.close(timeout=10)
-                logger.debug(f"Closed owned Dask cluster: {self._cluster.scheduler_address}")
+                logger.debug(f"Closed owned Dask cluster: {cluster_addr}")
                 self._cluster = None
-                # Force garbage collection and allow async tasks to finish using Dask's sync
+                # Force garbage collection and allow async tasks to finish
                 gc.collect()
-                sync(asyncio.sleep(0.2))
+                loop = asyncio.get_event_loop()
+                # Use standard asyncio run_until_complete
+                loop.run_until_complete(asyncio.sleep(0.2))
             except Exception as cluster_close_err:
                 logger.warning(
-                    f"Error closing owned Dask cluster {self._cluster.scheduler_address}: {cluster_close_err}"
+                    # Use stored address here
+                    f"Error closing owned Dask cluster {cluster_addr}: {cluster_close_err}"
                 )
         else:
             logger.debug("No owned Dask cluster to close.")
