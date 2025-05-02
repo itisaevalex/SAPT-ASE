@@ -118,7 +118,8 @@ jobs:
       if: ${{ !cancelled() }} # Only run if previous steps succeeded
       # Continue on Windows due to potential dask port flakes (only affects mock mode now)
       continue-on-error: ${{ matrix.os == 'windows-latest' && matrix.psi4-mode == 'mock' }}
-      # Default shell should work for finding the installed saptase command
+      # Use login shell for real mode to ensure conda env is active
+      shell: ${{ matrix.psi4-mode == 'real' && 'bash -l {0}' || 'default' }}
       env:
         OMP_NUM_THREADS: 1
         # Conditionally set CI_FAST based on matrix
