@@ -369,4 +369,19 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Removed manual cleanup loops from the stress test as `DaskExecutor` now handles reliable cluster closure.
 - **Outcome:** The Dask stress test now passes consistently without leaking `LocalCluster` instances. All Dask-related tests are green, and the leak detection fixtures confirm no clusters remain after the test suite completes.
 
+### [YYYY-MM-DD] CI Setup for Real Psi4 Execution
+- Added Conda environment file (`environment-ci.yml`) with Psi4 and dependencies.
+- Modified GitHub Actions workflow (`.github/workflows/ci.yml`):
+    - Introduced `psi4-mode` matrix (`mock`, `real`).
+    - Used `mamba-org/setup-micromamba` to install Conda env for `real` mode.
+    - Conditionally installed dependencies and ran tests based on `psi4-mode`.
+    - Set `CI_FAST=1` only for `mock` mode.
+    - Resolved issues with file paths (`ENOENT`), `micromamba create` arguments, and shell activation for smoke tests.
+    - Marked Psi4-specific tests with `@pytest.mark.psi4`.
+- Added `psi4` marker definition to `pyproject.toml`.
+- Updated `saptase.core.backend._has_psi4` logic to correctly handle mocked Psi4 in tests when `CI_FAST=1`.
+- Lowered Dask leak guard log level from ERROR to INFO in `saptase/execution/dask.py`.
+- Added documentation (`docs/ci_psi4.md`) explaining the setup.
+- **Status:** All CI jobs (lint, mock tests, real psi4 tests, smoke tests) are now passing.
+
 ---

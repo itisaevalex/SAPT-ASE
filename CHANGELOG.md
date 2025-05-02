@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions
 adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Added `psi4` pytest marker and applied it to tests requiring a real Psi4 installation.
+- Created Conda environment file (`environment-ci.yml`) for CI `real` mode.
+- Added documentation (`docs/ci_psi4.md`) explaining the Psi4 CI setup and local replication.
+
+### Changed
+- Modified GitHub Actions workflow (`.github/workflows/ci.yml`):
+    - Introduced `psi4-mode` matrix dimension (`mock`, `real`).
+    - Conditionally install dependencies using `pip` (`mock`) or `micromamba` (`real`).
+    - Conditionally run tests based on markers (`not slow and not psi4` for `mock`, `psi4` for `real`).
+    - Use `mamba-org/setup-micromamba` for Conda environment creation and caching.
+    - Conditionally activate conda environment for smoke test in `real` mode.
+- Refactored `saptase.core.backend._has_psi4` logic to correctly handle mocked Psi4 when `CI_FAST=1`.
+- Changed Dask leak guard log level from `ERROR` to `INFO` in `saptase.execution.dask.py`.
+
+### Fixed
+- Resolved CI failures related to installing Psi4 (`ENOENT` for environment file, invalid `micromamba create` args).
+- Fixed CI smoke test failures in `real` mode (`ModuleNotFoundError`, argument parsing error) by ensuring execution within the activated conda environment.
+- Fixed test failures in `mock` mode (`tests/test_backend.py`, `tests/test_backend_scratch.py`) caused by `CI_FAST=1` prematurely exiting `Psi4Backend.calculate`.
+
 ## [0.4.0] – 2025-04-24
 
 ### Added
