@@ -48,7 +48,10 @@ jobs:
     - name: Set-up TeX-Live (+latexmk & friends)
       uses: teatimeguest/setup-texlive-action@v3
       with:
+        # ① install a minimal but *engine-containing* scheme
+        # ② then the extra packages we explicitly need
         packages: |
+          scheme-small      # → brings in pdflatex, xelatex, etc.
           latexmk
           amsmath
           amsfonts
