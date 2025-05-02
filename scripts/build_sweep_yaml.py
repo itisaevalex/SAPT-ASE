@@ -88,29 +88,23 @@ def main():
             dimer_name = base_name.replace(" ", "_")  # Sanitize name
             task_id = f"{dimer_name}_{basis}"
 
-            # Define monomers using relative paths
-            monomer_a_relpath = file_a.relative_to(
-                args.split_xyz_dir.parent
-            )  # Relative to parent (e.g., 'data')
-            monomer_b_relpath = file_b.relative_to(args.split_xyz_dir.parent)
-
-            tasks.append(
-                {
-                    "id": task_id,
-                    "basis_set": basis,
-                    "method": args.method,
-                    "monomer_a": {
-                        "file": str(monomer_a_relpath),
-                        "charge": args.monomer_a_charge,
-                        "multiplicity": args.monomer_a_mult,
-                    },
-                    "monomer_b": {
-                        "file": str(monomer_b_relpath),
-                        "charge": args.monomer_b_charge,
-                        "multiplicity": args.monomer_b_mult,
-                    },
-                }
-            )
+            # Define monomers using relative paths from the repository root
+            # The Path objects file_a and file_b already hold this.
+            tasks.append({
+                "id": task_id,
+                "basis_set": basis,
+                "method": args.method,
+                "monomer_a": {
+                    "file": str(file_a),
+                    "charge": args.monomer_a_charge,
+                    "multiplicity": args.monomer_a_mult
+                },
+                "monomer_b": {
+                    "file": str(file_b),
+                    "charge": args.monomer_b_charge,
+                    "multiplicity": args.monomer_b_mult
+                },
+            })
 
     # Structure matches SAPTASE expected input YAML format
     job_config = {
