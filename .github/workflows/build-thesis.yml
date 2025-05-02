@@ -56,6 +56,7 @@ jobs:
           amsmath
           amsfonts
           lm                # Latin Modern fonts
+          lipsum
 
     # → the action intentionally does **not** modify $PATH.
     - name: Add TeX-Live bin directory to PATH

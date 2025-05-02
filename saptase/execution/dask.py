@@ -18,6 +18,7 @@ import gc
 import asyncio
 import time
 import inspect # Added for isawaitable
+import weakref # Potentially needed for handler cleanup logic
 from dask.distributed.utils import sync
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -126,42 +127,101 @@ class DaskExecutor:
                 self.client = None
 
         if self._cluster:
-            cluster_to_close = self._cluster
+            cluster = self._cluster      # keep a hard ref until we're sure GC can reap
             cluster_addr = "unknown" # Default in case of early error
             try:
-                cluster_addr = cluster_to_close.scheduler_address
-                logger.debug(f"Attempting to await close for owned Dask cluster: {cluster_addr}")
-                # LocalCluster.close() is *sometimes* a coroutine, sometimes None.
-                maybe_coro = cluster_to_close.close() 
+                cluster_addr = cluster.scheduler_address
+                logger.debug(f"Attempting close for owned Dask cluster: {cluster_addr}")
+
+                # --- 1) shut down workers / scheduler (sync or async) ---
+                maybe_coro = cluster.close()
                 if inspect.isawaitable(maybe_coro):
                     await maybe_coro
                     logger.debug(f"Successfully awaited close for owned Dask cluster: {cluster_addr}")
                 else:
-                     # synchronous path – give Dask's background threads a moment
+                    # synchronous path – give Dask's background threads a moment
                     logger.debug(f"Cluster close returned None (synchronous); adding small sleep.")
                     await asyncio.sleep(0.05)
 
-                # wait (max 5 s) for weak-ref to disappear from LocalCluster._instances
+                # --- 2) break *all* remaining strong refs held by the cluster ---
+                # a) event-loop references (common on Windows)
+                try:
+                    cluster.loop = None          # type: ignore
+                    logger.debug(f"Cluster {cluster_addr}: Set .loop to None")
+                except AttributeError:
+                    pass # Might not exist depending on version/state
+                except Exception as e:
+                    logger.warning(f"Cluster {cluster_addr}: Error clearing .loop: {e}")
+
+                # b) loggers keep weakrefs, but handlers may keep strong refs
+                # Check if scheduler and its logger exist before accessing handlers
+                scheduler = getattr(cluster, 'scheduler', None)
+                scheduler_logger = getattr(scheduler, '_logger', None) if scheduler else None
+                if scheduler_logger and hasattr(scheduler_logger, 'handlers'):
+                    try:
+                        for h in list(scheduler_logger.handlers):
+                            scheduler_logger.removeHandler(h)
+                            # Optionally close the handler if it has a close method
+                            if hasattr(h, 'close'):
+                                h.close()
+                        logger.debug(f"Cluster {cluster_addr}: Removed/closed logger handlers")
+                    except Exception as e:
+                        logger.warning(f"Cluster {cluster_addr}: Error removing logger handlers: {e}")
+
+                # c) nannies / workers keep .cluster back-refs
+                workers_or_nannies = getattr(cluster, "workers", {})
+                if not workers_or_nannies: # Fallback for nannies if workers is empty/doesn't exist
+                    workers_or_nannies = getattr(cluster, "nannies", {})
+
+                cleared_worker_refs = 0
+                for w in workers_or_nannies.values():
+                    try:
+                        if hasattr(w, 'cluster'):
+                           w.cluster = None              # type: ignore
+                           cleared_worker_refs += 1
+                    except Exception as e:
+                         logger.warning(f"Cluster {cluster_addr}: Error clearing worker/nanny back-ref: {e}")
+                if cleared_worker_refs > 0:
+                     logger.debug(f"Cluster {cluster_addr}: Cleared .cluster back-ref for {cleared_worker_refs} workers/nannies")
+
+                # --- 3) drop *our* reference and run a definitive GC sweep ---
+                self._cluster = None # Drop the reference from DaskExecutor
+                cluster = None       # Drop the local hard reference
+                logger.debug(f"Cluster {cluster_addr}: Dropped strong references, starting GC sweep.")
+                await asyncio.sleep(0)            # yield to let ref-cycles dissolve
+                for i in range(2):               # two passes => gen2 sweep
+                    gc.collect()
+                    await asyncio.sleep(0.05)
+                logger.debug(f"Cluster {cluster_addr}: Completed GC sweep.")
+
+                # --- 4) final safety check (max 5 s) ---
+                # Use the original reference we saved in 'cluster_to_close' before cleanup
                 deadline = time.monotonic() + 5.0
-                while cluster_to_close in getattr(LocalCluster, "_instances", set()):
+                instances_set = getattr(LocalCluster, "_instances", set())
+                initial_check = cluster_to_close in instances_set # Corrected: use cluster_to_close
+                logger.debug(f"Polling: Initial check for {cluster_addr} in _instances: {initial_check}")
+
+                while cluster_to_close in instances_set: # Corrected: use cluster_to_close
                     if time.monotonic() > deadline:
-                        logger.warning(
-                            f"LocalCluster {cluster_addr} still present in _instances after 5 s timeout."
+                        logger.error(
+                            f"Leak-guard: LocalCluster {cluster_addr} still present after hard GC and 5s timeout."
                         )
                         break
                     #logger.debug(f"Polling: Cluster {cluster_addr} still in _instances...") # Verbose
                     gc.collect()
                     await asyncio.sleep(0.05)
+                    instances_set = getattr(LocalCluster, "_instances", set()) # Re-fetch in case it changed
                 else:
                     logger.debug(f"Polling: Cluster {cluster_addr} successfully removed from _instances.")
 
             except Exception as cluster_close_err:
-                logger.warning(f"Error awaiting/polling close for owned Dask cluster {cluster_addr}: {cluster_close_err}")
+                logger.warning(f"Error during cluster close/cleanup for {cluster_addr}: {cluster_close_err}")
             finally:
-                # drop our strong reference so GC can reap the object
+                # Ensure our reference is dropped regardless of errors during cleanup
                 self._cluster = None
-                # Encourage weak-ref cleanup *now*, so _instances clears promptly
-                gc.collect()
+                cluster = None
+                cluster_to_close = None # Clear the reference used in the loop
+                gc.collect() # Final GC encouragement
         else:
             logger.debug("No owned Dask cluster to close.")
 
