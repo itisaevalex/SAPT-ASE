@@ -9,7 +9,7 @@ from types import ModuleType  # Added for type hint
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from pathlib import Path  # Ensure Path is imported
 import shutil  # Import shutil
-import contextlib # Import contextlib
+import contextlib  # Import contextlib
 
 from saptase.core.scratch import TaskScratch
 
@@ -158,13 +158,13 @@ def _psi4_scratch(path: Union[str, Path]):
 
     try:
         # Attempt to get IOManager and current path (robust against missing psi4)
-        if psi4 and hasattr(psi4, 'core') and hasattr(psi4.core, 'IOManager'):
+        if psi4 and hasattr(psi4, "core") and hasattr(psi4.core, "IOManager"):
             try:
                 iomgr = psi4.core.IOManager.shared_object()
-                original_iomgr_path = iomgr.get_default_path() # Get original API path
+                original_iomgr_path = iomgr.get_default_path()  # Get original API path
             except Exception as e:
                 logger.warning(f"Could not get/set IOManager path: {e}")
-                iomgr = None # Ensure iomgr is None if setup failed
+                iomgr = None  # Ensure iomgr is None if setup failed
 
         # Set the environment variable
         os.environ["PSI_SCRATCH"] = str_path
@@ -174,11 +174,11 @@ def _psi4_scratch(path: Union[str, Path]):
                 iomgr.set_default_path(str_path)
                 logger.debug(f"Set PSI_SCRATCH env='{str_path}', IOManager path='{str_path}'")
             except Exception as e:
-                 logger.warning(f"Could not set IOManager path to '{str_path}': {e}")
+                logger.warning(f"Could not set IOManager path to '{str_path}': {e}")
         else:
             logger.debug(f"Set PSI_SCRATCH env='{str_path}' (IOManager not available/used)")
 
-        yield # Let the calculation run
+        yield  # Let the calculation run
 
     finally:
         # --- Restore original settings --- #
@@ -188,7 +188,7 @@ def _psi4_scratch(path: Union[str, Path]):
                 del os.environ["PSI_SCRATCH"]
                 restored_env_msg = "Unset"
             else:
-                 restored_env_msg = "(was not set)"
+                restored_env_msg = "(was not set)"
         else:
             os.environ["PSI_SCRATCH"] = original_psi_scratch_env
             restored_env_msg = f"'{original_psi_scratch_env}'"
@@ -204,7 +204,9 @@ def _psi4_scratch(path: Union[str, Path]):
                 logger.warning(f"Could not restore IOManager path to '{original_iomgr_path}': {e}")
                 restored_iomgr_msg = f"(Failed to restore: {e})"
 
-        logger.debug(f"Restored PSI_SCRATCH env={restored_env_msg}, IOManager path={restored_iomgr_msg}")
+        logger.debug(
+            f"Restored PSI_SCRATCH env={restored_env_msg}, IOManager path={restored_iomgr_msg}"
+        )
 
 
 # --- Backend Implementations ---
@@ -235,7 +237,9 @@ class Psi4Backend(SaptBackend):
         # {"scf_type": "pk", "qc_scf": "true", "maxiter": 50}
     ]
 
-    def __init__(self, memory: str = "2GB", scratch_root: Optional[str] = None, keep_scratch: bool = False):
+    def __init__(
+        self, memory: str = "2GB", scratch_root: Optional[str] = None, keep_scratch: bool = False
+    ):
         """Initialize the Psi4 backend.
 
         Args:
@@ -317,7 +321,9 @@ class Psi4Backend(SaptBackend):
         effective_scratch_root = self.scratch_root or os.getenv("SAPTASE_SCRATCH_ROOT")
         # TaskScratch now manages the creation/deletion based on keep_scratch
         # We pass the determined root and the keep_scratch flag from self.
-        with TaskScratch(task.id, scratch_root=effective_scratch_root, keep_scratch=self.keep_scratch) as scratch_manager:
+        with TaskScratch(
+            task.id, scratch_root=effective_scratch_root, keep_scratch=self.keep_scratch
+        ) as scratch_manager:
             # The actual scratch path for this task is available via scratch_manager
             # Pass the path string directly
             return self._calculate_inner(task, scratch_manager)
@@ -346,8 +352,12 @@ class Psi4Backend(SaptBackend):
                 # logger.debug(f"Set Psi4 local scratch to: {task_scratch_dir}") # No longer needed
 
                 # Create a dimer molecule with fragments
-                a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
-                b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
+                a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[
+                    2
+                ]  # Skip atom count and comment
+                b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[
+                    2
+                ]  # Skip atom count and comment
                 molecule_str = (
                     f"{task.monomer_a.charge} {task.monomer_a.multiplicity}\n"
                     f"{a_xyz}\n"
@@ -378,15 +388,17 @@ class Psi4Backend(SaptBackend):
                     # -----------------------------------------------------------------
                     # 🩹 hot-fix: drop options Psi4 does not understand
                     for bad in ("scratch_root", "keep_scratch"):
-                        psi4_options.pop(bad, None)        # silently discard if present
+                        psi4_options.pop(bad, None)  # silently discard if present
                     # -----------------------------------------------------------------
 
                     # Safety Guard (remains correct)
-                    _illegal = {'scratch_root', 'keep_scratch'}
+                    _illegal = {"scratch_root", "keep_scratch"}
                     illegal_keys = _illegal & psi4_options.keys()
                     if illegal_keys:
                         # This path indicates a deeper issue if reached
-                        raise ValueError(f"Internal bug: STILL found illegal Psi4 options {illegal_keys} after explicit removal")
+                        raise ValueError(
+                            f"Internal bug: STILL found illegal Psi4 options {illegal_keys} after explicit removal"
+                        )
 
                     psi4.set_options(psi4_options)
 
@@ -406,7 +418,9 @@ class Psi4Backend(SaptBackend):
                         BasisIncompatible,
                     ) as e:
                         error_str = str(e).lower()
-                        if isinstance(e, BasisIncompatible) or re.search(r"basis set|basisset|could not find basis", error_str):
+                        if isinstance(e, BasisIncompatible) or re.search(
+                            r"basis set|basisset|could not find basis", error_str
+                        ):
                             logger.error(f"Basis set error encountered: {e}")
                             raise BasisIncompatible(str(e)) from e
                         else:
@@ -414,7 +428,9 @@ class Psi4Backend(SaptBackend):
                             raise PsiProgramCrashed(f"Psi4 validation error: {e}") from e
                     except (psi4.PsiException, MemoryExceeded) as e:
                         error_str = str(e).lower()
-                        if isinstance(e, MemoryExceeded) or re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
+                        if isinstance(e, MemoryExceeded) or re.search(
+                            r"memoryerror|malloc|memory allocation|out of memory", error_str
+                        ):
                             logger.error(f"Psi4 memory error detected: {e}")
                             raise MemoryExceeded(str(e)) from e
                         else:
@@ -422,10 +438,14 @@ class Psi4Backend(SaptBackend):
                             raise PsiProgramCrashed(f"Psi4 execution failed: {e}") from e
                     except Exception as e:
                         error_str = str(e).lower()
-                        if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
+                        if re.search(
+                            r"memoryerror|malloc|memory allocation|out of memory", error_str
+                        ):
                             logger.error(f"Potential memory error detected (non-PsiException): {e}")
                             raise MemoryExceeded(str(e)) from e
-                        logger.error(f"Unexpected error during Psi4 calculation: {e}", exc_info=True)
+                        logger.error(
+                            f"Unexpected error during Psi4 calculation: {e}", exc_info=True
+                        )
                         raise PsiProgramCrashed(f"Unexpected error: {e}") from e
 
                 # --- After SCF Loop --- #
@@ -438,7 +458,9 @@ class Psi4Backend(SaptBackend):
                         and len(last_scf_error.args) >= 2
                     ):
                         err_descr, iterations, *_ = last_scf_error.args
-                        formatted_err = f"Could not converge {err_descr} in {iterations} iterations."
+                        formatted_err = (
+                            f"Could not converge {err_descr} in {iterations} iterations."
+                        )
                     else:
                         formatted_err = str(last_scf_error)
 

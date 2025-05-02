@@ -15,21 +15,37 @@ import yaml
 # Default list if --basis-list is empty
 # TODO: Ensure this list aligns with project goals / ADR-0005 if it exists
 BASIS_DEFAULT = [
-    "jun-cc-pVDZ", "aug-cc-pVDZ", "jul-cc-pVDZ",
-    "jun-cc-pVTZ", "aug-cc-pVTZ", "jul-cc-pVTZ",
-    "jun-cc-pVQZ", "aug-cc-pVQZ",
-    "def2-SVPD", "def2-TZVPD", "def2-QZVPD", "def2-TZVPPD"
+    "jun-cc-pVDZ",
+    "aug-cc-pVDZ",
+    "jul-cc-pVDZ",
+    "jun-cc-pVTZ",
+    "aug-cc-pVTZ",
+    "jul-cc-pVTZ",
+    "jun-cc-pVQZ",
+    "aug-cc-pVQZ",
+    "def2-SVPD",
+    "def2-TZVPD",
+    "def2-QZVPD",
+    "def2-TZVPPD",
 ]
 
+
 def main():
-    p = argparse.ArgumentParser(description=textwrap.dedent(__doc__),
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--split-xyz-dir", required=True, type=pathlib.Path,
-                   help="Directory containing pre-split monomer .xyz files (e.g., *_a.xyz, *_b.xyz).")
-    p.add_argument("--basis-list", default="",
-                   help="Comma-separated list of basis sets. Defaults to built-in list.")
-    p.add_argument("--out", required=True, type=pathlib.Path,
-                   help="Output YAML file path.")
+    p = argparse.ArgumentParser(
+        description=textwrap.dedent(__doc__), formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "--split-xyz-dir",
+        required=True,
+        type=pathlib.Path,
+        help="Directory containing pre-split monomer .xyz files (e.g., *_a.xyz, *_b.xyz).",
+    )
+    p.add_argument(
+        "--basis-list",
+        default="",
+        help="Comma-separated list of basis sets. Defaults to built-in list.",
+    )
+    p.add_argument("--out", required=True, type=pathlib.Path, help="Output YAML file path.")
     p.add_argument("--monomer-a-charge", type=int, default=0)
     p.add_argument("--monomer-a-mult", type=int, default=1)
     p.add_argument("--monomer-b-charge", type=int, default=0)
@@ -51,7 +67,7 @@ def main():
         # Decide if this should be an error
 
     tasks = []
-    num_pairs = 0 # Counter for valid pairs
+    num_pairs = 0  # Counter for valid pairs
     # Iterate through monomer A files to find corresponding monomer B files
     for file_a in monomer_a_files:
         # Construct the expected filename for monomer B
@@ -59,60 +75,67 @@ def main():
         file_b = args.split_xyz_dir / f"{base_name}_b.xyz"
 
         if not file_b.is_file():
-            print(f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}.")
+            print(
+                f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}."
+            )
             continue
-        
-        num_pairs += 1 # Found a valid pair
+
+        num_pairs += 1  # Found a valid pair
 
         # Create tasks for each basis set for this monomer pair
         for basis in bases:
             # Use the base name (without _a/_b suffix) for the task ID
-            dimer_name = base_name.replace(" ", "_") # Sanitize name
+            dimer_name = base_name.replace(" ", "_")  # Sanitize name
             task_id = f"{dimer_name}_{basis}"
 
             # Define monomers using relative paths
-            monomer_a_relpath = file_a.relative_to(args.split_xyz_dir.parent) # Relative to parent (e.g., 'data')
+            monomer_a_relpath = file_a.relative_to(
+                args.split_xyz_dir.parent
+            )  # Relative to parent (e.g., 'data')
             monomer_b_relpath = file_b.relative_to(args.split_xyz_dir.parent)
 
-            tasks.append({
-                "id": task_id,
-                "basis_set": basis,
-                "method": args.method,
-                "monomer_a": {
-                    "file": str(monomer_a_relpath),
-                    "charge": args.monomer_a_charge,
-                    "multiplicity": args.monomer_a_mult
-                },
-                "monomer_b": {
-                    "file": str(monomer_b_relpath),
-                    "charge": args.monomer_b_charge,
-                    "multiplicity": args.monomer_b_mult
-                },
-            })
+            tasks.append(
+                {
+                    "id": task_id,
+                    "basis_set": basis,
+                    "method": args.method,
+                    "monomer_a": {
+                        "file": str(monomer_a_relpath),
+                        "charge": args.monomer_a_charge,
+                        "multiplicity": args.monomer_a_mult,
+                    },
+                    "monomer_b": {
+                        "file": str(monomer_b_relpath),
+                        "charge": args.monomer_b_charge,
+                        "multiplicity": args.monomer_b_mult,
+                    },
+                }
+            )
 
     # Structure matches SAPTASE expected input YAML format
     job_config = {
-        "execution": {
-            "mode": "local_parallel" # This is informational, mode is set by CLI
-        },
-        "tasks": tasks
+        "execution": {"mode": "local_parallel"},  # This is informational, mode is set by CLI
+        "tasks": tasks,
     }
 
     try:
         # Use safe_dump for better YAML practices
         yaml_output = yaml.safe_dump(job_config, sort_keys=False)
         args.out.write_text(yaml_output)
-        print(f"Generated {len(tasks)} tasks "
-              f"({num_pairs} dimers × {len(bases)} bases) to {args.out}")
+        print(
+            f"Generated {len(tasks)} tasks "
+            f"({num_pairs} dimers × {len(bases)} bases) to {args.out}"
+        )
     except Exception as e:
         print(f"Error writing YAML file {args.out}: {e}")
         # Decide if you want to sys.exit(1) here
+
 
 if __name__ == "__main__":
     # Added basic import error handling for PyYAML
     try:
         import yaml
-        import textwrap # Ensure textwrap is imported here as well
+        import textwrap  # Ensure textwrap is imported here as well
     except ImportError:
         print("Error: PyYAML is required to run this script. Install with: pip install pyyaml")
         exit(1)
