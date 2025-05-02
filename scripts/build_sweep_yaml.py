@@ -1,12 +1,14 @@
- #!/usr/bin/env python
+#!/usr/bin/env python
 """
-Emit a sweep.yml containing one SaptTask per (xyz,basis).
-Usage: python scripts/build_sweep_yaml.py --xyz-dir s22_xyz --basis-list "" --out sweep.yml
-If --basis-list omitted, uses the 12-basis list from ADR-0005.
+Emit a sweep.yml containing one SaptTask per (monomer pair, basis).
+Usage: python scripts/build_sweep_yaml.py --split-xyz-dir data/s22_split --basis-list "" --out sweep.yml
+If --basis-list omitted, uses the 12-basis list from the script.
+Expects monomer files named like '*_a.xyz' and '*_b.xyz' in the directory.
 """
 import argparse
 import itertools
 import pathlib
+import textwrap  # Import textwrap
 
 import yaml
 
@@ -16,14 +18,14 @@ BASIS_DEFAULT = [
     "jun-cc-pVDZ", "aug-cc-pVDZ", "jul-cc-pVDZ",
     "jun-cc-pVTZ", "aug-cc-pVTZ", "jul-cc-pVTZ",
     "jun-cc-pVQZ", "aug-cc-pVQZ",
-    "def2-SVPD", "def2-TZVPD", "def2-QZVPD", "def2-ma-SVPD"
+    "def2-SVPD", "def2-TZVPD", "def2-QZVPD", "def2-TZVPPD"
 ]
 
 def main():
     p = argparse.ArgumentParser(description=textwrap.dedent(__doc__),
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--xyz-dir", required=True, type=pathlib.Path,
-                   help="Directory containing .xyz files for dimers.")
+    p.add_argument("--split-xyz-dir", required=True, type=pathlib.Path,
+                   help="Directory containing pre-split monomer .xyz files (e.g., *_a.xyz, *_b.xyz).")
     p.add_argument("--basis-list", default="",
                    help="Comma-separated list of basis sets. Defaults to built-in list.")
     p.add_argument("--out", required=True, type=pathlib.Path,
@@ -36,46 +38,51 @@ def main():
 
     args = p.parse_args()
 
-    if not args.xyz_dir.is_dir():
-        raise FileNotFoundError(f"XYZ directory not found: {args.xyz_dir}")
+    if not args.split_xyz_dir.is_dir():
+        raise FileNotFoundError(f"Split XYZ directory not found: {args.split_xyz_dir}")
 
     bases = [b.strip() for b in args.basis_list.split(",") if b.strip()] or BASIS_DEFAULT
-    xyz_files = sorted(args.xyz_dir.glob("*.xyz"))
 
-    if not xyz_files:
-        print(f"Warning: No .xyz files found in {args.xyz_dir}")
+    # Find all monomer A files
+    monomer_a_files = sorted(args.split_xyz_dir.glob("*_a.xyz"))
+
+    if not monomer_a_files:
+        print(f"Warning: No '*_a.xyz' files found in {args.split_xyz_dir}")
         # Decide if this should be an error
 
     tasks = []
-    for xyz_file, basis in itertools.product(xyz_files, bases):
-        # Use filename without extension as part of the task ID
-        dimer_name = xyz_file.stem.replace(" ", "_") # Sanitize name
-        task_id = f"{dimer_name}_{basis}"
+    # Iterate through monomer A files to find corresponding monomer B files
+    for file_a in monomer_a_files:
+        # Construct the expected filename for monomer B
+        base_name = file_a.name.replace("_a.xyz", "")
+        file_b = args.split_xyz_dir / f"{base_name}_b.xyz"
 
-        # Assume the XYZ file contains the full dimer
-        # SAPTASE needs monomer definitions. This script currently duplicates
-        # the whole XYZ for both monomers. Adjust if your XYZ files are different
-        # or if SAPTASE handles dimer splitting internally based on keywords.
-        tasks.append({
-            "id": task_id,
-            "basis_set": basis,
-            "method": args.method,
-            # Define monomers using the file path
-            "monomer_a": {
-                "file": str(xyz_file),
-                "charge": args.monomer_a_charge,
-                "multiplicity": args.monomer_a_mult
-            },
-            "monomer_b": {
-                "file": str(xyz_file),
-                "charge": args.monomer_b_charge,
-                "multiplicity": args.monomer_b_mult
-            },
-            # Add any default keywords if needed
-            # "additional_keywords": {
-            #     "some_psi4_option": True
-            # }
-        })
+        if not file_b.is_file():
+            print(f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}.")
+            continue
+
+        # Create tasks for each basis set for this monomer pair
+        for basis in bases:
+            # Use the base name (without _a/_b suffix) for the task ID
+            dimer_name = base_name.replace(" ", "_") # Sanitize name
+            task_id = f"{dimer_name}_{basis}"
+
+            # Define monomers using the separate file paths
+            tasks.append({
+                "id": task_id,
+                "basis_set": basis,
+                "method": args.method,
+                "monomer_a": {
+                    "file": str(file_a.resolve()), # Use absolute path
+                    "charge": args.monomer_a_charge,
+                    "multiplicity": args.monomer_a_mult
+                },
+                "monomer_b": {
+                    "file": str(file_b.resolve()), # Use absolute path
+                    "charge": args.monomer_b_charge,
+                    "multiplicity": args.monomer_b_mult
+                },
+            })
 
     # Structure matches SAPTASE expected input YAML format
     job_config = {
@@ -98,7 +105,7 @@ if __name__ == "__main__":
     # Added basic import error handling for PyYAML
     try:
         import yaml
-        import textwrap # Needed for description formatting
+        import textwrap # Ensure textwrap is imported here as well
     except ImportError:
         print("Error: PyYAML is required to run this script. Install with: pip install pyyaml")
         exit(1)

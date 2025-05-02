@@ -1,0 +1,16 @@
+tasks:
+  - id: water_dimer_test
+    basis_set: jun-cc-pVDZ                  # cheapest rung, converges in ~15 s
+    method: sapt0
+    monomer_a:
+      file: tests/data/water_dimer.xyz
+      charge: 0
+      multiplicity: 1
+    monomer_b:
+      file: tests/data/water_dimer.xyz
+      charge: 0
+      multiplicity: 1
+
+execution:
+  mode: local_parallel          # one core is enough here
+  scratch_root: /tmp/saptase_smoke   # any fast local dir 
