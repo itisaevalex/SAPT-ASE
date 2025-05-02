@@ -354,6 +354,7 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
   - Centralized `CI_FAST=1` check in `saptase/core/backend.py` and introduced `SuccessMockBackend` to ensure mock execution works correctly in CLI subprocess tests.
   - Added `assert_no_leaked_dask_cluster` fixture to `tests/conftest.py` to detect Dask cluster leaks.
   - Fixed detected Dask leaks by ensuring `DaskExecutor` is used as a context manager in `saptase/core/orchestrator.py::run_dask` and refining its `close()` method.
+  - Resolved persistent `LocalCluster` leaks reported by fixtures by modifying `DaskExecutor.close` to explicitly dereference the cluster/client (`self._cluster=None`, `self.client=None`) and call `gc.collect()`.
   - Corrected assertions in `tests/test_cli_run.py::test_cli_run_local_dask_success` to check the DB by `task_id` and the correct scratch path.
   - Added `--keep-scratch` flag to the CLI command in `test_cli_run_local_dask_success` to ensure scratch directories persist for assertions.
 - **Outcome:** All tests now pass, including the previously failing CLI test. Dask cluster leak detection is active and no leaks are reported. Database corruption warnings during testing are now handled more gracefully.
