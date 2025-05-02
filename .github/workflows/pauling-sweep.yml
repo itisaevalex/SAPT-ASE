@@ -22,7 +22,8 @@ jobs:
     timeout-minutes: 180            # hard stop to protect budget
     env:
       # Use the tmpfs ramdisk on the large runner for scratch
-      SAPTASE_SCRATCH_ROOT: /mnt/ramdisk/saptase_scratch
+      # Runner-local scratch that is always writable and auto-cleaned
+      SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
       # Keep other env vars from the detailed example if needed
       PYTHONUNBUFFERED: "1"
       DB_FILE: runs/pauling.sqlite  # Assuming you want the checkpoint DB
@@ -67,18 +68,25 @@ jobs:
         echo "Sweep YAML created:"
         cat sweep.yml
 
-    # 5 Run the sweep using local_parallel mode
+    # 5 Prepare scratch root
+    - name: Prepare scratch root
+      shell: bash
+      run: |
+        echo "Ensuring scratch root directory exists: ${{ env.SAPTASE_SCRATCH_ROOT }}"
+        mkdir -p "${{ env.SAPTASE_SCRATCH_ROOT }}"
+
+    # 6 Run the sweep using local_parallel mode
     - name: Execute sweep via SAPTASE
       shell: bash -l {0} # Use login shell for conda env
       run: |
         echo "Running SAPTASE sweep..."
-        # Invoke via python -m for robustness in CI environment
-        python -m saptase.cli run sweep.yml \
+        # Use -w for workers based on CLI definition
+        saptase run sweep.yml \
             --mode local_parallel \
             -w $(nproc)
         # Scratch root is handled by SAPTASE_SCRATCH_ROOT env var
 
-    # 6 Compress results (scratch + runs dir)
+    # 7 Compress results (scratch + runs dir)
     # Be mindful of artifact size limits (check GitHub docs)
     - name: Tar results
       if: always() # Run even if previous steps fail to capture logs/db
@@ -89,7 +97,7 @@ jobs:
         tar -czvf outputs.tar.gz runs/ ${{ env.SAPTASE_SCRATCH_ROOT }} || echo "Tar failed, continuing..."
 
 
-    # 7 Upload provenance DB & compressed outputs
+    # 8 Upload provenance DB & compressed outputs
     - name: Persist artifacts
       if: always() # Run even if previous steps fail
       uses: actions/upload-artifact@v4
