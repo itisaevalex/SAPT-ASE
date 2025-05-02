@@ -94,7 +94,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v1
       with:
         cache-downloads: true          # speed subsequent runs
-        environment-file: env/ci.yml   # Use the conda env file
+        environment-file: .github/workflows/ci.yml   # Use the conda env file from workflow dir
         create-args: >-
           python=${{ matrix.python-version }}
 
