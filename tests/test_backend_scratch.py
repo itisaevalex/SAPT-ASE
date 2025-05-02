@@ -75,6 +75,7 @@ def patch_psi4(monkeypatch):
     monkeypatch.setattr("saptase.core.backend.psi4", DummyPsi4, raising=False)
 
 
+@pytest.mark.psi4
 def test_backend_writes_in_scratch(tmp_path: Path):
     # Prepare molecules
     mol = Molecule(symbols=["H"], coordinates=[[0, 0, 0]])

@@ -44,13 +44,14 @@ def sample_task() -> SaptTask:
 
 # --- Test Cases will go here --- #
 
-
+@pytest.mark.psi4
 def test_psi4_backend_init(psi4_backend):
     """Test basic initialization of Psi4Backend."""
     assert isinstance(psi4_backend, Psi4Backend)
     assert psi4_backend.memory == "1GB"
 
 
+@pytest.mark.psi4
 @patch("saptase.core.backend.psi4", autospec=True)
 def test_psi4_scf_recovery_success_on_second_attempt(mock_psi4, psi4_backend, sample_task):
     """Test that calculation recovers and succeeds on the 2nd SCF attempt."""
@@ -116,6 +117,7 @@ def test_psi4_scf_recovery_success_on_second_attempt(mock_psi4, psi4_backend, sa
 # --- More Test Cases --- #
 
 
+@pytest.mark.psi4
 @patch("saptase.core.backend.psi4", autospec=True)
 def test_psi4_scf_success_first_attempt(mock_psi4, psi4_backend, sample_task):
     """Test calculation succeeds on the first SCF attempt without recovery."""
@@ -141,6 +143,7 @@ def test_psi4_scf_success_first_attempt(mock_psi4, psi4_backend, sample_task):
     assert result.energies["total"] == -0.1
 
 
+@pytest.mark.psi4
 @patch("saptase.core.backend.psi4", autospec=True)
 def test_psi4_scf_failure_all_attempts(mock_psi4, psi4_backend, sample_task):
     """Test calculation fails after exhausting all SCF recovery attempts."""
