@@ -29,12 +29,16 @@ jobs:
         echo "--- Workflow file content END ---"
 
     - name: Convert .mmd to .svg
+      # Using a while loop instead of xargs to avoid potential interpretation issues.
+      # Adding --no-sandbox for Puppeteer in CI environment.
       run: |
+        echo '{ "args": ["--no-sandbox"] }' > mmdc-puppeteer-config.json
         find docs/thesis/figs -name '*.mmd' -print0 | while IFS= read -r -d $'\0' FILE; do
           outfile="${FILE%.*}.svg"
           echo "Converting [$FILE] to [$outfile]"
-          mmdc -i "$FILE" -o "$outfile"
+          mmdc -i "$FILE" -o "$outfile" --puppeteerConfigFile mmdc-puppeteer-config.json
         done
+        rm mmdc-puppeteer-config.json # Clean up temp config file
 
     #------------------------------------------------------------
     # 2) Compile LaTeX with latexmk inside a full TeX Live image
