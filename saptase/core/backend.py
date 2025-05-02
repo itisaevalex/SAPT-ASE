@@ -8,6 +8,8 @@ from importlib import import_module  # Added for import_module
 from types import ModuleType  # Added for type hint
 from typing import Any, ClassVar, Dict, List, Optional
 
+from saptase.core.scratch import TaskScratch
+
 from .errors import (
     BasisIncompatible,
     MemoryExceeded,
@@ -15,15 +17,12 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
+from .models import SaptResult, SaptTask, TaskStatus
 
 # Global placeholder for the (optional) Psi4 module.
 # Tests that need to stub Psi4 patch this symbol, and production code acquires the
 # real library lazily via ``Psi4Backend._has_psi4``.
 psi4: Optional[ModuleType] = None
-
-from saptase.core.scratch import TaskScratch
-
-from .models import SaptResult, SaptTask, TaskStatus
 
 # --- Setup Logger --- #
 logger = logging.getLogger(__name__)

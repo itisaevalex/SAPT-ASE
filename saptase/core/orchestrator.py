@@ -52,7 +52,7 @@ def get_default_backend() -> SaptBackend:
         try:
             from tests.conftest import MockBackend  # type: ignore
 
-            logger.debug("CI_FAST detected – using tests.conftest.MockBackend")
+            logger.debug("CI_FAST detected - using tests.conftest.MockBackend")
             return MockBackend()
         except Exception:
             # Fallback for CI_FAST: Use SuccessMockBackend to simulate success
@@ -645,7 +645,6 @@ class SaptWorkflow:
                 # Dask.as_completed gives Futures as they finish
                 try:
                     from dask.distributed import (
-                        Future,  # Import Future for type hinting
                         as_completed,  # Local import to avoid hard dep when not used
                     )
                 except ImportError:  # pragma: no cover
