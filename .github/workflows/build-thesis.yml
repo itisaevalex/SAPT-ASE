@@ -22,6 +22,12 @@ jobs:
     - name: Install mermaid-cli
       run: npm install -g @mermaid-js/mermaid-cli
 
+    - name: DEBUG - Show workflow file content on runner
+      run: |
+        echo "--- Workflow file content START ---"
+        cat .github/workflows/build-thesis.yml
+        echo "--- Workflow file content END ---"
+
     - name: Convert .mmd to .svg
       run: |
         find docs/thesis/figs -name '*.mmd' -print0 | xargs -0 -I FILE bash -c '
