@@ -11,4 +11,5 @@ dependencies:
   - tqdm
   - dask
   - distributed
+  - numpy   
   # - ruamel.yaml>=0.17,<0.19 # Add if needed by tests
