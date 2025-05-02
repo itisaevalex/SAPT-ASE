@@ -52,11 +52,13 @@ def get_default_backend() -> SaptBackend:
         # Prefer the richer *MockBackend* provided by the test-suite if importable
         try:
             from tests.conftest import MockBackend  # type: ignore
+
             logger.debug("CI_FAST detected – using tests.conftest.MockBackend")
             return MockBackend()
         except Exception:
             # Fallback for CI_FAST: Use SuccessMockBackend to simulate success
-            from .backend import SuccessMockBackend 
+            from .backend import SuccessMockBackend
+
             logger.debug(
                 "CI_FAST detected but tests.conftest.MockBackend not found. "
                 "Falling back to SuccessMockBackend."
@@ -66,11 +68,13 @@ def get_default_backend() -> SaptBackend:
     # Production/default path – try real Psi4 backend first
     try:
         # Ensure Psi4Backend is imported here if not globally
-        from .backend import Psi4Backend 
+        from .backend import Psi4Backend
+
         return Psi4Backend()
-    except Exception: # Broad exception to catch Psi4 import errors or init failures
+    except Exception:  # Broad exception to catch Psi4 import errors or init failures
         # Fallback for normal execution: Use DummyBackend to indicate failure
         from .backend import DummyBackend
+
         logger.warning(
             "Psi4 backend unavailable (import/init failed). "
             "Defaulting to DummyBackend (will report failure)."
@@ -642,14 +646,16 @@ class SaptWorkflow:
                 # Dask.as_completed gives Futures as they finish
                 try:
                     from dask.distributed import (
-                        as_completed, # Local import to avoid hard dep when not used
-                        Future # Import Future for type hinting
+                        as_completed,  # Local import to avoid hard dep when not used
+                        Future,  # Import Future for type hinting
                     )
                 except ImportError:  # pragma: no cover
                     raise RuntimeError("dask.distributed is required for run_dask")
 
                 # Process results as they complete
-                for fut in tqdm(as_completed(list(future_to_task_id.keys())), total=len(future_to_task_id)):
+                for fut in tqdm(
+                    as_completed(list(future_to_task_id.keys())), total=len(future_to_task_id)
+                ):
                     original_task_id = future_to_task_id[fut]
                     original_task = task_details.get(original_task_id)
                     try:
@@ -662,7 +668,8 @@ class SaptWorkflow:
                                 not res.success
                                 and not existing.success
                                 # Use attempt_number from result, default to 0 if missing
-                                and getattr(res, 'attempt_number', 0) > getattr(existing, 'attempt_number', 0)
+                                and getattr(res, "attempt_number", 0)
+                                > getattr(existing, "attempt_number", 0)
                             )
                         )
                         if replace:
@@ -691,24 +698,26 @@ class SaptWorkflow:
                         if self.logdb and self.logdb.conn:
                             self.logdb.log_task_attempt(run_id=self.current_run_id, result=fail_res)
                         else:
-                            logger.error(f"Cannot log Dask future failure for {original_task_id} as DB is not available.")
+                            logger.error(
+                                f"Cannot log Dask future failure for {original_task_id} as DB is not available."
+                            )
                     finally:
                         # Clean up future to potentially release resources earlier
                         # fut.release()
-                        pass # Releasing futures can sometimes cause issues, monitor if needed
-                    
+                        pass  # Releasing futures can sometimes cause issues, monitor if needed
+
         except Exception as setup_exc:
             logger.critical(f"Failed to setup or run Dask execution: {setup_exc}", exc_info=True)
             # Ensure logdb is closed even if executor setup failed
             if self.logdb and self.logdb.conn:
-                 self.logdb.close()
+                self.logdb.close()
             # Re-raise or handle as appropriate
-            raise setup_exc from setup_exc # Reraise to signal failure
-        
+            raise setup_exc from setup_exc  # Reraise to signal failure
+
         # Cleanup (Executor is closed by context manager, just close DB)
         if self.logdb and self.logdb.conn:
-             self.logdb.close()
-         
+            self.logdb.close()
+
         logger.info(
             "Dask execution for run_id %s finished (%d tasks processed).",
             self.current_run_id,

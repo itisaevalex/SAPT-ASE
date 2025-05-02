@@ -37,7 +37,7 @@ def test_cli_run_local_dask_success(tmp_path):
         # Override scratch root to use tmp_path for isolation
         "--scratch-root",
         str(scratch_dir),
-        "--keep-scratch", # Add flag to prevent scratch cleanup
+        "--keep-scratch",  # Add flag to prevent scratch cleanup
     ]
 
     # Execute the command
@@ -62,16 +62,14 @@ def test_cli_run_local_dask_success(tmp_path):
 
     conn = sqlite3.connect(final_db_path)
     cursor = conn.cursor()
-    
+
     # Query status for the specific tasks by task_id
     cursor.execute(
-        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", 
-        ("h_dimer_1",)
+        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", ("h_dimer_1",)
     )
     row1 = cursor.fetchone()
     cursor.execute(
-        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", 
-        ("h_dimer_2",)
+        "SELECT status FROM task_log WHERE task_id = ? ORDER BY log_id DESC LIMIT 1", ("h_dimer_2",)
     )
     row2 = cursor.fetchone()
     conn.close()
@@ -85,8 +83,10 @@ def test_cli_run_local_dask_success(tmp_path):
     # Check that scratch was created (presence of dirs like h_dimer_1*)
     # The actual task scratch dirs are created inside a 'saptase' subdir
     saptase_scratch_dir = scratch_dir / "saptase"
-    assert saptase_scratch_dir.exists(), f"Expected 'saptase' scratch subdirectory not found in {scratch_dir}"
-    
+    assert (
+        saptase_scratch_dir.exists()
+    ), f"Expected 'saptase' scratch subdirectory not found in {scratch_dir}"
+
     scratch_contents = list(saptase_scratch_dir.iterdir())
     assert len(scratch_contents) > 0, f"Scratch subdirectory {saptase_scratch_dir} appears empty"
     assert any(

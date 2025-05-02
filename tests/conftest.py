@@ -4,7 +4,7 @@ import logging
 import pytest  # Added for fixture
 from saptase import SaptBackend, SaptResult, SaptTask, TaskStatus
 
-try: # Optional import for dask leak detection
+try:  # Optional import for dask leak detection
     from distributed import LocalCluster
 except ImportError:
     LocalCluster = None
@@ -51,18 +51,18 @@ def assert_no_leaked_dask_cluster():
     # Use weakref set directly if LocalCluster._instances is not available/stable
     # For now, assume _instances exists as per the provided example
     try:
-        before = set(LocalCluster._instances) # type: ignore
+        before = set(LocalCluster._instances)  # type: ignore
         logger.debug(f"Dask cluster instances before session: {len(before)}")
     except AttributeError:
         logger.warning("Could not access LocalCluster._instances, cannot perform leak check.")
-        yield # Allow tests to run anyway
+        yield  # Allow tests to run anyway
         return
 
-    yield # Run the tests
+    yield  # Run the tests
 
     # Check instances remaining *after* the session tests
     try:
-        after = set(LocalCluster._instances) # type: ignore
+        after = set(LocalCluster._instances)  # type: ignore
         logger.debug(f"Dask cluster instances after session: {len(after)}")
         leaked = after - before
         if leaked:
@@ -75,13 +75,13 @@ def assert_no_leaked_dask_cluster():
                     detail = repr(cluster)
                 leaked_details.append(detail)
             leaked_str = "; ".join(leaked_details)
-            
+
             assert after <= before, (
                 f"Leaked {len(leaked)} Dask LocalCluster(s): [{leaked_str}]. "
                 "Ensure clusters/clients are closed, e.g., using 'with LocalCluster(...):' or 'client.close()'."
             )
         else:
-             logger.debug("No Dask clusters appear to have been leaked during the session.")
+            logger.debug("No Dask clusters appear to have been leaked during the session.")
     except AttributeError:
         # Logged warning on entry, nothing more to do
         pass
@@ -101,16 +101,16 @@ def assert_no_cluster_leak_per_test():
         return
 
     try:
-        before = set(LocalCluster._instances) # type: ignore
+        before = set(LocalCluster._instances)  # type: ignore
     except AttributeError:
         # This case should be caught by the session fixture's warning, but handle defensively
         logger.warning("Could not access LocalCluster._instances in per-test check.")
         yield
         return
-    yield # Run the actual test function
+    yield  # Run the actual test function
 
     try:
-        after = set(LocalCluster._instances) # type: ignore
+        after = set(LocalCluster._instances)  # type: ignore
         leaked = after - before
         if leaked:
             # Create a more informative message
@@ -124,8 +124,8 @@ def assert_no_cluster_leak_per_test():
                 leaked_details.append(f"  - {cluster!r} (Scheduler: {scheduler_address})")
 
             pytest.fail(
-                "Test leaked the following Dask LocalCluster instance(s):\\n"\
-                + "\\n".join(leaked_details)\
+                "Test leaked the following Dask LocalCluster instance(s):\\n"
+                + "\\n".join(leaked_details)
                 + "\\nEnsure the cluster is closed using a context manager or client.shutdown()."
             )
     except AttributeError:

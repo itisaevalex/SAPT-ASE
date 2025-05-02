@@ -49,9 +49,10 @@ def _maybe_import_psi4() -> Optional[ModuleType]:
     except ModuleNotFoundError:
         logger.debug("psi4 module not found.")
         return None
-    except Exception as e: # Catch other potential import errors
+    except Exception as e:  # Catch other potential import errors
         logger.warning(f"An unexpected error occurred during psi4 import: {e}")
         return None
+
 
 # Optional import of Psi4 using the helper
 psi4 = _maybe_import_psi4()
@@ -98,17 +99,18 @@ class DummyBackend(SaptBackend):
 # --- Success Mock Backend (for CI_FAST mode) ---
 class SuccessMockBackend(SaptBackend):
     """A mock backend that returns a *successful* dummy result.
-    
+
     Used as a fallback in CI_FAST mode when the test-suite's MockBackend
     cannot be imported, ensuring tests requiring a successful mock backend
     can pass without needing Psi4 or the full test suite structure available.
     """
+
     def calculate(self, task: SaptTask) -> SaptResult:
         logger.debug(f"SuccessMockBackend: Generating success result for task {task.id}")
         result = SaptResult(task_id=task.id)
         result.success = True
-        result.energies = { # Provide minimal energies to avoid downstream errors
-            "total": -0.001, 
+        result.energies = {  # Provide minimal energies to avoid downstream errors
+            "total": -0.001,
             "electrostatics": -0.001,
             "exchange": 0.0,
             "induction": 0.0,
@@ -117,8 +119,8 @@ class SuccessMockBackend(SaptBackend):
         # Add basis/method for potential logging/provenance consistency
         result.basis_set = task.basis_set
         result.method = task.method
-        result.elapsed_time = 0.1 # Simulate some time taken
-        result.attempt_number = 0 # Indicate it succeeded on first (mock) attempt
+        result.elapsed_time = 0.1  # Simulate some time taken
+        result.attempt_number = 0  # Indicate it succeeded on first (mock) attempt
         task.status = TaskStatus.COMPLETED
         return result
 
@@ -204,15 +206,19 @@ class Psi4Backend(SaptBackend):
         if psi4 is None:
             # Log appropriately based on whether CI_FAST was the reason
             if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
-                 logger.info("Psi4Backend initialized in CI_FAST mode. Actual psi4 calls will be skipped if psi4 is None.")
+                logger.info(
+                    "Psi4Backend initialized in CI_FAST mode. Actual psi4 calls will be skipped if psi4 is None."
+                )
             else:
-                 logger.warning(
-                     "Psi4 not found or failed to import. Psi4Backend calculations will fail unless a mock is injected."
-                 )
+                logger.warning(
+                    "Psi4 not found or failed to import. Psi4Backend calculations will fail unless a mock is injected."
+                )
             self._psi4_available = False
         else:
             self._psi4_available = True
-            logger.debug(f"Psi4Backend initialized with psi4 version: {getattr(psi4, '__version__', 'unknown')}")
+            logger.debug(
+                f"Psi4Backend initialized with psi4 version: {getattr(psi4, '__version__', 'unknown')}"
+            )
 
     def calculate(self, task: SaptTask) -> SaptResult:
         """Perform a SAPT calculation wrapped in a TaskScratch directory."""

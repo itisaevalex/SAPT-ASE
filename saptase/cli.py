@@ -214,9 +214,9 @@ def run_command(args: argparse.Namespace):
             execution_config.get("dask", {}).get("scheduler"),
         )
     )
-    
+
     # Scratch Root: CLI > YAML > Default (from config.EXECUTION)
-    scratch_root_cli = args.scratch_root # Read from args now
+    scratch_root_cli = args.scratch_root  # Read from args now
     scratch_root_yaml = execution_config.get("scratch_root")
     scratch_root_default = EXECUTION.scratch_root
     # Precedence: CLI > YAML > Default
@@ -226,12 +226,12 @@ def run_command(args: argparse.Namespace):
     logger.debug(f"Using scratch root: {scratch_root}")
 
     # Keep Scratch: CLI > YAML > Default (from config.EXECUTION)
-    keep_scratch_cli = args.keep_scratch # Read from args now
+    keep_scratch_cli = args.keep_scratch  # Read from args now
     keep_scratch_yaml = execution_config.get("keep_scratch")
     keep_scratch_default = EXECUTION.keep_scratch
     # Precedence: CLI flag present > YAML > Default
     # Note: args.keep_scratch is True if flag present, False if not, None if not defined (shouldn't happen with action='store_true')
-    if keep_scratch_cli: # If CLI flag --keep-scratch is used, it overrides everything
+    if keep_scratch_cli:  # If CLI flag --keep-scratch is used, it overrides everything
         keep_scratch = True
     elif keep_scratch_yaml is not None:
         keep_scratch = bool(keep_scratch_yaml)
@@ -239,9 +239,8 @@ def run_command(args: argparse.Namespace):
         keep_scratch = keep_scratch_default
     logger.debug(f"Keep scratch directories: {keep_scratch}")
 
-
     # --- Workflow Construction ---
-    workflow = SaptWorkflow() # Uses default backend (Psi4)
+    workflow = SaptWorkflow()  # Uses default backend (Psi4)
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -265,7 +264,7 @@ def run_command(args: argparse.Namespace):
                 method=task_config.get("method", "sapt0"),
                 additional_keywords=task_config.get("additional_keywords", {}),
             )
-            
+
             # IMPORTANT: Add CLI scratch settings to task keywords BEFORE adding to workflow
             # This ensures they override YAML/defaults handled by add_task
             if scratch_root is not None:
@@ -273,10 +272,10 @@ def run_command(args: argparse.Namespace):
             # keep_scratch needs care - add_task defaults to False if not present
             # We only need to set it if the final decision was True
             if keep_scratch:
-                 task.additional_keywords["keep_scratch"] = True
-                 
+                task.additional_keywords["keep_scratch"] = True
+
             workflow.add_task(task)
-            tasks_to_run.append(task) # Keep track for reporting if needed
+            tasks_to_run.append(task)  # Keep track for reporting if needed
 
         except (ValueError, TypeError) as e:
             logger.error(f"Error processing task '{task_id}' from config: {e}")
@@ -312,7 +311,9 @@ def run_command(args: argparse.Namespace):
     if results:
         success_count = sum(1 for r in results.values() if r.success)
         fail_count = len(results) - success_count
-        logger.info(f"Workflow finished. Tasks completed: {success_count}, Tasks failed: {fail_count}")
+        logger.info(
+            f"Workflow finished. Tasks completed: {success_count}, Tasks failed: {fail_count}"
+        )
         # Add more detailed reporting if needed
     else:
         logger.warning("Workflow execution did not return results.")

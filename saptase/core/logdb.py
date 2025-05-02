@@ -59,11 +59,13 @@ class LogDb:
             if self.conn:
                 try:
                     self.conn.close()
-                    logger.debug("Closed potentially open connection handle before recovery attempt.")
+                    logger.debug(
+                        "Closed potentially open connection handle before recovery attempt."
+                    )
                 except sqlite3.Error as close_err:
                     logger.error(f"Error closing failed connection handle: {close_err}")
                 finally:
-                    self.conn = None # Ensure it's marked as closed
+                    self.conn = None  # Ensure it's marked as closed
                     self.cursor = None
 
             # Check if it's the "malformed" error or similar corruption issue
@@ -71,7 +73,9 @@ class LogDb:
                 logger.error(
                     f"Database file {self.db_path} appears corrupt or malformed: {e}. Attempting recovery..."
                 )
-                backup_path = self.db_path.with_suffix(f"{self.db_path.suffix}.bak_{int(time.time())}") # Add timestamp to avoid collision
+                backup_path = self.db_path.with_suffix(
+                    f"{self.db_path.suffix}.bak_{int(time.time())}"
+                )  # Add timestamp to avoid collision
                 try:
                     logger.warning(f"Renaming corrupt database to {backup_path}")
                     # Ensure the target backup file doesn't exist (unlikely but possible)
@@ -82,11 +86,13 @@ class LogDb:
                     # Second connection attempt (will create a new file)
                     logger.info(f"Attempting to create a fresh database at {self.db_path}")
                     self._connect_and_initialize()
-                    logger.info(f"Successfully created and connected to new database: {self.db_path}")
+                    logger.info(
+                        f"Successfully created and connected to new database: {self.db_path}"
+                    )
                 except OSError as rename_err:
                     logger.critical(
                         f"Failed to rename corrupt database {self.db_path} to {backup_path}: {rename_err}. Cannot log provenance.",
-                        exc_info=True
+                        exc_info=True,
                     )
                     # Cannot proceed if rename fails
                     self.conn = None
@@ -94,51 +100,49 @@ class LogDb:
                 except sqlite3.Error as second_conn_err:
                     logger.critical(
                         f"Failed to connect to or initialize new database {self.db_path} after corruption recovery: {second_conn_err}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     # Cannot proceed if second connection fails
                     self.conn = None
                     self.cursor = None
-                except Exception as recovery_exc: # Catch any other recovery error
+                except Exception as recovery_exc:  # Catch any other recovery error
                     logger.critical(
                         f"Unexpected error during database corruption recovery: {recovery_exc}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     self.conn = None
                     self.cursor = None
             else:
                 # If it's a different DatabaseError, log critically and fail
                 logger.critical(
-                    f"Unexpected DatabaseError connecting to {self.db_path}: {e}",
-                    exc_info=True
+                    f"Unexpected DatabaseError connecting to {self.db_path}: {e}", exc_info=True
                 )
                 self.conn = None
                 self.cursor = None
-        except sqlite3.Error as e: # Catch other potential sqlite3 errors during first connect/init
+        except sqlite3.Error as e:  # Catch other potential sqlite3 errors during first connect/init
             logger.critical(
-                f"Failed to connect to or initialize database {self.db_path}: {e}",
-                exc_info=True
+                f"Failed to connect to or initialize database {self.db_path}: {e}", exc_info=True
             )
             # Ensure connection is closed if error happened after connect but during init
             if self.conn:
                 try:
                     self.conn.close()
                 except sqlite3.Error:
-                    pass # Ignore error during close here
+                    pass  # Ignore error during close here
             self.conn = None
             self.cursor = None
-        except Exception as general_exc: # Catch any other unexpected error
-             logger.critical(
-                 f"Unexpected error during LogDb initialization for {self.db_path}: {general_exc}",
-                 exc_info=True
-             )
-             if self.conn:
-                 try:
-                     self.conn.close()
-                 except sqlite3.Error:
-                     pass
-             self.conn = None
-             self.cursor = None
+        except Exception as general_exc:  # Catch any other unexpected error
+            logger.critical(
+                f"Unexpected error during LogDb initialization for {self.db_path}: {general_exc}",
+                exc_info=True,
+            )
+            if self.conn:
+                try:
+                    self.conn.close()
+                except sqlite3.Error:
+                    pass
+            self.conn = None
+            self.cursor = None
 
     def _connect_and_initialize(self):
         """Internal helper to connect and setup the DB."""
@@ -150,11 +154,13 @@ class LogDb:
         self.cursor.execute("PRAGMA journal_mode=WAL;")
         # Check if WAL mode was set successfully
         journal_mode = self.cursor.execute("PRAGMA journal_mode;").fetchone()
-        if journal_mode and journal_mode[0].lower() != 'wal':
-            logger.warning(f"Could not enable WAL journal mode for {self.db_path}. Current mode: {journal_mode[0]}. Concurrency issues might occur.")
+        if journal_mode and journal_mode[0].lower() != "wal":
+            logger.warning(
+                f"Could not enable WAL journal mode for {self.db_path}. Current mode: {journal_mode[0]}. Concurrency issues might occur."
+            )
 
         self.cursor.execute("PRAGMA busy_timeout=10000;")
-        self._initialize_db() # Create tables if needed
+        self._initialize_db()  # Create tables if needed
 
     def _initialize_db(self):
         """Create necessary tables and metadata if they don't exist."""
