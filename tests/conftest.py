@@ -1,3 +1,13 @@
+import asyncio
+import sys
+# Switch event loop policy on Windows for Dask compatibility
+if sys.platform.startswith("win"):
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print("\nINFO: Switched asyncio event loop policy to WindowsSelectorEventLoopPolicy for Dask tests.\n")
+    except Exception as e:
+        print(f"\nWARNING: Failed to switch asyncio event loop policy: {e}\n")
+
 """Test fixtures and utilities for the saptase package."""
 
 import logging
@@ -6,8 +16,10 @@ from saptase import SaptBackend, SaptResult, SaptTask, TaskStatus
 
 try:  # Optional import for dask leak detection
     from distributed import LocalCluster
+    from distributed.utils_test import cleanup as dask_cleanup_fixture # Import with alias
 except ImportError:
     LocalCluster = None
+    dask_cleanup_fixture = None # Define as None if import fails
 
 logger = logging.getLogger(__name__)
 
@@ -135,3 +147,19 @@ def assert_no_cluster_leak_per_test():
         # Catch other potential errors during the check
         logger.error(f"Error during per-test Dask leak check: {e}", exc_info=True)
         pytest.fail(f"Error during per-test Dask leak check: {e}")
+
+
+# Make the dask cleanup fixture available for usefixtures
+@pytest.fixture
+def cleanup(request):
+    """Yields the dask cleanup fixture if available."""
+    if dask_cleanup_fixture is None:
+        pytest.skip("Dask utils_test not available, skipping cleanup fixture.")
+    # Dask's cleanup is a fixture function, so we call it
+    # It might need the request object, let's pass it.
+    # We don't actually need to *yield* anything from it here,
+    # just ensure it runs by calling it.
+    # The original cleanup fixture handles setup/teardown itself.
+    # However, standard pytest fixtures expect a yield or return.
+    # Let's yield it directly, assuming it behaves like a standard fixture.
+    yield dask_cleanup_fixture

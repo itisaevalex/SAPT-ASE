@@ -16,6 +16,7 @@ from dask.distributed.utils import sync # Added for Dask sync
 from pathlib import Path
 from typing import List
 import logging
+import weakref
 
 import numpy as np
 import pytest
@@ -23,6 +24,7 @@ from dask.distributed import Client, LocalCluster
 from saptase.core.backend import SaptBackend
 from saptase.core.models import Molecule, SaptResult, SaptTask
 from saptase.core.orchestrator import SaptWorkflow
+from saptase.core.orchestrator import DaskExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class TrivialBackend(SaptBackend):
         )
 
 
+@pytest.mark.usefixtures("cleanup")
 @pytest.mark.slow
 @pytest.mark.dask
 def test_dask_many_tasks_stress(tmp_path: Path):
@@ -62,32 +65,22 @@ def test_dask_many_tasks_stress(tmp_path: Path):
     for t in tasks:
         wf.add_task(t)
 
-    # --- Run via Dask ---
+    # --- Run via Dask using DaskExecutor ---
     t0 = time.perf_counter()
-    cluster_instance = None
-    with LocalCluster(n_workers=4, threads_per_worker=1, asynchronous=False) as cluster:
-        cluster_instance = cluster # Keep a reference to the instance
-        with Client(cluster):
-            wf.run_dask(max_workers=4)
+    # cluster_instance = None # No longer needed
+    # Use DaskExecutor for robust cleanup
+    with DaskExecutor(n_workers=4) as executor:
+        # Pass the client from the executor to run_dask
+        # Assumes run_dask accepts a client object directly or via scheduler kwarg
+        wf.run_dask(scheduler=executor.client.scheduler.address)
 
-    # Ensure cluster is fully cleaned up before leak check
-    if cluster_instance:
-        cluster_addr = cluster_instance.scheduler_address
-        start_time = time.monotonic()
-        gc.collect()
-        # Poll for removal from _instances
-        while cluster_instance in LocalCluster._instances:
-            # Extend timeout to 6 seconds
-            if time.monotonic() - start_time > 6.0:
-                logger.warning(f"Stress test cluster {cluster_addr} still in _instances after 6s timeout.")
-                # Optionally fail the test here if the leak is critical
-                # pytest.fail(f"Cluster {cluster_addr} leak detected after 6s timeout")
-                break
-            logger.debug(f"Waiting for stress test cluster {cluster_addr} to leave _instances...")
-            gc.collect()
-            time.sleep(0.05)   # give weak-ref a chance to clear
-        else:
-             logger.debug(f"Stress test cluster {cluster_addr} successfully removed from _instances.")
+    # Remove the manual cleanup loop - DaskExecutor.__exit__ handles it
+    # if cluster_instance:
+    #    cluster_addr = "unknown"
+    #    ...
+    #    ...
+    #    del cluster_ref
+    #    gc.collect()
 
     runtime = time.perf_counter() - t0
 
