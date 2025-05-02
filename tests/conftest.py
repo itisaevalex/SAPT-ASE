@@ -90,3 +90,48 @@ def assert_no_leaked_dask_cluster():
         logger.error(f"Error during Dask leak check: {e}", exc_info=True)
         # Optionally re-raise or assert false here if errors during leak check should fail tests
         # pytest.fail(f"Error during Dask leak check: {e}")
+
+
+@pytest.fixture(autouse=True)
+def assert_no_cluster_leak_per_test():
+    """Fixture to ensure no Dask LocalCluster is leaked by an individual test."""
+    if LocalCluster is None:
+        # Dask not installed, nothing to check
+        yield
+        return
+
+    try:
+        before = set(LocalCluster._instances) # type: ignore
+    except AttributeError:
+        # This case should be caught by the session fixture's warning, but handle defensively
+        logger.warning("Could not access LocalCluster._instances in per-test check.")
+        yield
+        return
+    yield # Run the actual test function
+
+    try:
+        after = set(LocalCluster._instances) # type: ignore
+        leaked = after - before
+        if leaked:
+            # Create a more informative message
+            leaked_details = []
+            for cluster in leaked:
+                try:
+                    # Attempt to get scheduler address, fall back if cluster is closed/inaccessible
+                    scheduler_address = cluster.scheduler_address
+                except Exception:
+                    scheduler_address = "Cluster already closed or inaccessible"
+                leaked_details.append(f"  - {cluster!r} (Scheduler: {scheduler_address})")
+
+            pytest.fail(
+                "Test leaked the following Dask LocalCluster instance(s):\\n"\
+                + "\\n".join(leaked_details)\
+                + "\\nEnsure the cluster is closed using a context manager or client.shutdown()."
+            )
+    except AttributeError:
+        # Logged warning on entry, nothing more to do
+        pass
+    except Exception as e:
+        # Catch other potential errors during the check
+        logger.error(f"Error during per-test Dask leak check: {e}", exc_info=True)
+        pytest.fail(f"Error during per-test Dask leak check: {e}")

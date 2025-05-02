@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import gc
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -102,23 +103,27 @@ class DaskExecutor:
     def close(self) -> None:
         """Close client and *owned* cluster (if any)."""
         try:
-            logger.debug(f"Attempting to close Dask client: {self.client.dashboard_link if hasattr(self.client, 'dashboard_link') else self.client}")
-            # Give client a moment to close gracefully
-            self.client.close(timeout=5)
-            logger.debug(f"Dask client closed.")
+            if self.client:
+                logger.debug(f"Attempting to close Dask client: {self.client.dashboard_link if hasattr(self.client, 'dashboard_link') else self.client}")
+                # Give client a moment to close gracefully
+                self.client.close(timeout=5)
+                logger.debug(f"Dask client closed.")
+                self.client = None
         except Exception as client_close_err:
              logger.warning(f"Error closing Dask client: {client_close_err}")
-        finally:
-            if self._cluster is not None:
-                 logger.debug(f"Attempting to close owned Dask cluster: {self._cluster.scheduler_address}")
-                 try:
-                     # Close the cluster synchronously, waiting for workers
-                     self._cluster.close(timeout=10) 
-                     logger.debug(f"Closed owned Dask cluster: {self._cluster.scheduler_address}")
-                 except Exception as cluster_close_err:
-                      logger.warning(f"Error closing owned Dask cluster {self._cluster.scheduler_address}: {cluster_close_err}")
-            else:
-                logger.debug("No owned Dask cluster to close.")
+
+        if self._cluster is not None:
+             logger.debug(f"Attempting to close owned Dask cluster: {self._cluster.scheduler_address}")
+             try:
+                 # Close the cluster synchronously, waiting for workers
+                 self._cluster.close(timeout=10)
+                 logger.debug(f"Closed owned Dask cluster: {self._cluster.scheduler_address}")
+                 self._cluster = None
+                 gc.collect()
+             except Exception as cluster_close_err:
+                  logger.warning(f"Error closing owned Dask cluster {self._cluster.scheduler_address}: {cluster_close_err}")
+        else:
+            logger.debug("No owned Dask cluster to close.")
 
     # We support ``with DaskExecutor(...) as ex:``
     def __enter__(self):
