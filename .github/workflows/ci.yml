@@ -109,7 +109,7 @@ jobs:
         OMP_NUM_THREADS: 1 # Limit threads for Psi4
         # CI_FAST is NOT set here, so tests run real calculations
       run: |
-        pytest -v -m "slow and psi4"
+        pytest -v -m "psi4" # Select tests requiring Psi4
 
     # ----------------------------------------------------------------------
     # CLI Smoke Test (Run for both modes, but uses CI_FAST for mock)
