@@ -26,7 +26,7 @@ jobs:
       run: |
         find docs/thesis/figs -name '*.mmd' -print0 | xargs -0 -I FILE bash -c '
           outfile="${FILE%.*}.svg";
-          echo "Converting $FILE to $outfile";
+          echo "Converting [$FILE] to [$outfile]";
           mmdc -i "$FILE" -o "$outfile";
         '
 
