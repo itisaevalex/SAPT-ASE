@@ -1,0 +1,109 @@
+# .github/workflows/pauling-sweep.yml
+name: SAPTASE Pauling-point sweep
+
+on:
+  workflow_dispatch:            # run manually from the GitHub UI
+    inputs:
+      basis_list:               # override default 12 bases if needed
+        description: "Comma-separated basis names (leave empty for default)"
+        required: false
+        default: ''
+      dimer_zip_url:
+        description: "URL to ZIP of .xyz files (optional, defaults to using ./s22_xyz/)"
+        required: false
+        default: ''
+
+jobs:
+  sweep:
+    # Use a larger runner label (e.g., ubuntu-latest-8-cores, ubuntu-latest-16-cores)
+    # Check available labels in your GitHub organization/enterprise settings
+    # Using ubuntu-latest for now, adjust as needed for available large runners.
+    runs-on: ubuntu-latest # <-- ADJUST THIS to your available large runner label if needed
+    timeout-minutes: 180            # hard stop to protect budget
+    env:
+      # Set scratch to runner's temp dir, usually fast SSD
+      SAPTASE_SCRATCH_ROOT: ${{ runner.temp }}/saptase_sweep_scratch
+
+    steps:
+
+    # 1 Checkout your repo
+    - uses: actions/checkout@v4
+
+    # 2 Set up Python environment using the existing CI environment file
+    - name: Set up micromamba + env
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: environment-ci.yml   # Use the existing conda env file
+        cache-environment: true # Cache the created environment
+        init-shell: bash        # Ensure bash is initialized
+
+    # 3 Prepare sweep input (download optional override, ensure target dir exists)
+    - name: Download and prepare dimers
+      shell: bash -l {0} # Use login shell for conda env
+      run: |
+        set -e
+        TARGET_XYZ_DIR="s22_xyz" # Default local directory
+        mkdir -p $TARGET_XYZ_DIR
+        if [[ -n "${{ github.event.inputs.dimer_zip_url }}" ]]; then
+          echo "Downloading dimers from ${{ github.event.inputs.dimer_zip_url }}..."
+          curl -L "${{ github.event.inputs.dimer_zip_url }}" -o dimers.zip
+          echo "Unzipping dimers to $TARGET_XYZ_DIR..."
+          unzip -q dimers.zip -d $TARGET_XYZ_DIR
+          rm dimers.zip
+        else
+          echo "Using existing/committed dimers in $TARGET_XYZ_DIR..."
+          # Add a check here if the directory must contain files?
+          if [ -z "$(ls -A $TARGET_XYZ_DIR)" ]; then
+             echo "Warning: $TARGET_XYZ_DIR is empty and no URL provided."
+             # Optionally fail: exit 1
+          fi
+        fi
+        echo "Using XYZ files from $(pwd)/$TARGET_XYZ_DIR"
+
+    # 4 Generate YAML job file using the provided script
+    - name: Build job file
+      shell: bash -l {0} # Use login shell for conda env
+      run: |
+        echo "Building sweep YAML..."
+        # Ensure script is executable if needed: chmod +x scripts/build_sweep_yaml.py
+        python scripts/build_sweep_yaml.py \
+          --xyz-dir s22_xyz \
+          --basis-list "${{ github.event.inputs.basis_list }}" \
+          --out sweep.yml
+        echo "Sweep YAML created:"
+        cat sweep.yml
+
+    # 5 Run the sweep using local_parallel mode
+    - name: Execute sweep via SAPTASE
+      shell: bash -l {0} # Use login shell for conda env
+      run: |
+        echo "Running SAPTASE sweep..."
+        # Use -w for workers based on CLI definition
+        saptase run sweep.yml \
+            --mode local_parallel \
+            -w $(nproc)
+        # Scratch root is handled by SAPTASE_SCRATCH_ROOT env var
+
+    # 6 Compress results (scratch + runs dir)
+    # Be mindful of artifact size limits (check GitHub docs)
+    - name: Tar results
+      if: always() # Run even if previous steps fail to capture logs/db
+      shell: bash
+      run: |
+        echo "Compressing results..."
+        # Create archive, continue on error (-k), show progress/verbose (-v)
+        tar -czvf outputs.tar.gz runs/ ${{ env.SAPTASE_SCRATCH_ROOT }} || echo "Tar failed, continuing..."
+
+
+    # 7 Upload provenance DB & compressed outputs
+    - name: Persist artifacts
+      if: always() # Run even if previous steps fail
+      uses: actions/upload-artifact@v4
+      with:
+        name: saptase-pauling-results-${{ github.run_id }}
+        path: |
+          outputs.tar.gz
+          runs/*.sqlite
+          sweep.yml
+        retention-days: 14
+        if-no-files-found: warn # Don't fail workflow if files missing 
