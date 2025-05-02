@@ -118,15 +118,21 @@ jobs:
       if: ${{ !cancelled() }} # Only run if previous steps succeeded
       # Continue on Windows due to potential dask port flakes (only affects mock mode now)
       continue-on-error: ${{ matrix.os == 'windows-latest' && matrix.psi4-mode == 'mock' }}
-      # No explicit shell needed here; run script handles conda env activation if needed
+      # Explicitly use login shell to allow micromamba activate
+      shell: bash -l {0}
       env:
         OMP_NUM_THREADS: 1
         # Conditionally set CI_FAST based on matrix
         CI_FAST: ${{ matrix.psi4-mode == 'mock' && 1 || 0 }}
       run: |
+        set -e # Exit on error
         if [[ "${{ matrix.psi4-mode }}" == "real" ]]; then
-          micromamba run -n saptase-ci -- python -m saptase.cli run examples/dask_local_demo.yml --mode dask
+          echo "Activating saptase-ci environment..."
+          micromamba activate saptase-ci
+          echo "Running smoke test in saptase-ci environment..."
+          python -m saptase.cli run examples/dask_local_demo.yml --mode dask
         else
+          echo "Running smoke test in default python environment..."
           python -m saptase.cli run examples/dask_local_demo.yml --mode dask
         fi
 
