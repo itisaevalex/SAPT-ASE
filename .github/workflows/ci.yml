@@ -85,6 +85,10 @@ jobs:
     # ----------------------------------------------------------------------
     # Setup for REAL Psi4 mode (micromamba install)
     # ----------------------------------------------------------------------
+    - name: List files for debugging
+      if: matrix.psi4-mode == 'real'
+      run: ls -la
+
     - name: Install Psi4 w/ micromamba (Real Mode)
       if: matrix.psi4-mode == 'real'
       uses: mamba-org/setup-micromamba@v1
