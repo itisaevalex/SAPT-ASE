@@ -219,20 +219,34 @@ class Psi4Backend(SaptBackend):
         # Note: We no longer store _psi4_available flag here.
 
     def _has_psi4(self) -> bool:
-        """True if a working psi4 module is in sys.modules *and* CI_FAST != 1."""
-        if os.getenv("CI_FAST") == "1":
+        """Return True if a usable ``psi4`` object is available.
+
+        The lookup order is:
+        1. Respect *fast* CI flag – if ``CI_FAST`` is set to a truthy value ("1", "true", "yes")
+           we always short-circuit and report *unavailable*.
+        2. If the **module-level** ``psi4`` global has been *monkey-patched* by the test-suite
+           (e.g. via ``@patch('saptase.core.backend.psi4')``) we treat that as a valid backend and
+           return ``True``.  This fixes the race where tests patch *after* import-time detection.
+        3. Attempt a *real* import via ``importlib``.  On success the imported module is stored in
+           the global namespace so subsequent calls are cheap.
+        """
+        # --- 1. Honour CI_FAST fast-skip flag --------------------------------------------------
+        if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
             return False
-        # Check sys.modules directly to see if a potentially mocked psi4 exists
-        if "psi4" in sys.modules and sys.modules["psi4"] is not None:
-             # Basic check: Does it look like a module or a mock?
-             # This might need refinement depending on how mocks are structured.
-             # For now, assume its presence means it's usable (or mocked).
+
+        # --- 2. Was psi4 already injected (or successfully imported earlier)? ------------------
+        if psi4 is not None:
             return True
-        # If not in sys.modules, try importing again (covers cases where it wasn't available at init)
+
+        # --- 3. Try a lazy import so that local developer installs still work ------------------
         try:
-            import psi4  # noqa: F401 - Re-import attempt
+            imported = import_module("psi4")
+            globals()["psi4"] = imported  # cache for future look-ups *and* for test patches
             return True
-        except Exception:
+        except ModuleNotFoundError:
+            return False
+        except Exception as e:
+            logger.debug(f"Unexpected error when importing psi4 lazily: {e}")
             return False
 
     def calculate(self, task: SaptTask) -> SaptResult:
