@@ -94,9 +94,9 @@ jobs:
       uses: mamba-org/setup-micromamba@v1
       with:
         cache-downloads: true          # speed subsequent runs
-        environment-file: .github/workflows/ci.yml   # Use the conda env file from workflow dir
+        environment-file: environment-ci.yml   # Use the new conda env file from repo root
         create-args: >-
-          python=${{ matrix.python-version }}
+          python=${{ matrix.python-version }} # Use matrix python version
 
     - name: Install saptase in editable mode (Real Mode)
       if: matrix.psi4-mode == 'real'
