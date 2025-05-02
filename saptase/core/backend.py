@@ -16,11 +16,10 @@ from .errors import (
     ScfFailed,
 )
 
-# Optional import of Psi4 (for tests we monkeypatch)
-try:
-    import psi4  # type: ignore
-except ImportError:
-    psi4 = None  # pragma: no cover – allow running without Psi4
+# Global placeholder for the (optional) Psi4 module.
+# Tests that need to stub Psi4 patch this symbol, and production code acquires the
+# real library lazily via ``Psi4Backend._has_psi4``.
+psi4: Optional[ModuleType] = None
 
 from saptase.core.scratch import TaskScratch
 
@@ -31,30 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 # --- Helper for Conditional Psi4 Import ---
-def _maybe_import_psi4() -> Optional[ModuleType]:
-    """Return the real psi4 module unless CI_FAST=1 or it's not importable.
-
-    Checks the CI_FAST environment variable. If set to '1', 'true', or 'yes' (case-insensitive),
-    or if psi4 cannot be imported, returns None. Otherwise, returns the imported psi4 module.
-    """
-    ci_fast = os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}
-    if ci_fast:
-        logger.debug("CI_FAST=1 detected, skipping psi4 import.")
-        return None
-    try:
-        psi4_module = import_module("psi4")
-        logger.debug("Successfully imported psi4 module.")
-        return psi4_module
-    except ModuleNotFoundError:
-        logger.debug("psi4 module not found.")
-        return None
-    except Exception as e:  # Catch other potential import errors
-        logger.warning(f"An unexpected error occurred during psi4 import: {e}")
-        return None
+# Removed
 
 
-# Optional import of Psi4 using the helper
-psi4 = _maybe_import_psi4()
+# --- Backend Implementations ---
 
 
 class SaptBackend(ABC):
@@ -220,7 +199,7 @@ class Psi4Backend(SaptBackend):
         """Return True if a usable ``psi4`` object is available.
 
         The lookup order is:
-        1. Respect *fast* CI flag – if ``CI_FAST`` is set to a truthy value ("1", "true", "yes")
+        1. Respect *fast* CI flag - if ``CI_FAST`` is set to a truthy value ("1", "true", "yes")
            we always short-circuit and report *unavailable*.
         2. If the **module-level** ``psi4`` global has been *monkey-patched* by the test-suite
            (e.g. via ``@patch('saptase.core.backend.psi4')``) we treat that as a valid backend and

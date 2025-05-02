@@ -14,8 +14,10 @@ import numpy as np  # Needed for Molecule coordinates
 
 from .config import EXECUTION  # Global scratch config
 from .core.interop.yaml import load_config  # YAML loader
-from .core.models import Molecule, SaptTask
+from .core.models import Molecule, SaptTask, SaptResult
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
+from .core.errors import SaptError, ScfFailed
+from .core.scratch import TaskScratch
 
 logger = logging.getLogger(__name__)  # Use module-level logger
 

@@ -18,8 +18,7 @@ from tqdm import tqdm
 
 from saptase.config import EXECUTION  # scratch defaults
 from saptase.core.scratch import TaskScratch  # Import TaskScratch
-
-from ..recovery.escalate import EscalationContext  # Import recovery context
+from saptase.recovery.escalate import EscalationContext  # Import recovery context
 from .backend import Psi4Backend, SaptBackend
 from .errors import SaptError  # Import base SaptError
 from .logdb import LogDb  # Import LogDb
@@ -41,7 +40,7 @@ def get_default_backend() -> SaptBackend:
     If the environment variable ``CI_FAST`` is set ("1", "true", or "yes") we
     intentionally avoid hitting the real Psi4 code path and instead return a
     lightweight mock/dummy backend so that integration tests can run anywhere
-    – *including* systems where Psi4 is not installed.
+    - *including* systems where Psi4 is not installed.
 
     Outside that special mode we attempt to instantiate :class:`Psi4Backend`.
     If Psi4 is missing we gracefully fall back to :class:`DummyBackend` while
