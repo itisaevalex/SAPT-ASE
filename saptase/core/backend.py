@@ -198,31 +198,36 @@ class Psi4Backend(SaptBackend):
         """Return True if a usable ``psi4`` object is available.
 
         The lookup order is:
-        1. Respect *fast* CI flag - if ``CI_FAST`` is set to a truthy value ("1", "true", "yes")
-           we always short-circuit and report *unavailable*.
-        2. If the **module-level** ``psi4`` global has been *monkey-patched* by the test-suite
-           (e.g. via ``@patch('saptase.core.backend.psi4')``) we treat that as a valid backend and
-           return ``True``.  This fixes the race where tests patch *after* import-time detection.
-        3. Attempt a *real* import via ``importlib``.  On success the imported module is stored in
-           the global namespace so subsequent calls are cheap.
+        1. If the **module-level** ``psi4`` global has been *populated* (either by a successful
+           prior import or by being monkey-patched by the test-suite), return ``True``.
+           This allows tests using `@patch` to work correctly even when `CI_FAST=1`.
+        2. If `psi4` is `None`, check the `CI_FAST` flag. If it's set to a truthy value
+           ("1", "true", "yes"), return ``False`` to prevent attempts to import the real Psi4.
+        3. If `psi4` is `None` and `CI_FAST` is *not* set, attempt a *real* import via
+           ``importlib``. Cache the result globally on success.
         """
-        # --- 1. Honour CI_FAST fast-skip flag --------------------------------------------------
-        if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
-            return False
-
-        # --- 2. Was psi4 already injected (or successfully imported earlier)? ------------------
+        # --- 1. Already populated (imported or mocked)? ----------------------------------------
         if psi4 is not None:
+            # logger.debug(f"_has_psi4: Found existing psi4 object (mock? {isinstance(psi4, getattr(psi4, 'Mock', type(None)))})")
             return True
 
-        # --- 3. Try a lazy import so that local developer installs still work ------------------
+        # --- 2. Honour CI_FAST fast-skip flag (only if psi4 not already mocked/imported) -------
+        if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+            # logger.debug("_has_psi4: CI_FAST is set and psi4 is None, returning False.")
+            return False
+
+        # --- 3. Try a lazy import (only if not CI_FAST and psi4 is None) -----------------------
+        # logger.debug("_has_psi4: Not CI_FAST and psi4 is None, attempting lazy import...")
         try:
             imported = import_module("psi4")
-            globals()["psi4"] = imported  # cache for future look-ups *and* for test patches
+            globals()["psi4"] = imported  # cache for future look-ups
+            # logger.debug("_has_psi4: Lazy import successful.")
             return True
         except ModuleNotFoundError:
+            # logger.debug("_has_psi4: Lazy import failed (ModuleNotFoundError).")
             return False
         except Exception as e:
-            logger.debug(f"Unexpected error when importing psi4 lazily: {e}")
+            logger.debug(f"_has_psi4: Unexpected error during lazy import: {e}")
             return False
 
     def calculate(self, task: SaptTask) -> SaptResult:
