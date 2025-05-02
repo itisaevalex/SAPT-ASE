@@ -47,8 +47,12 @@ jobs:
     - name: Set up TeX Live
       uses: teatimeguest/setup-texlive-action@v3   # ~400 MB but cached (see below)
       with:
-        # Pick a minimal scheme then add needed pkgs to tlmgr if you prefer
-        scheme: full
+        # Explicitly install latexmk and a few common packages
+        packages: |
+          latexmk
+          amsmath
+          amsfonts
+          lm # Latin Modern fonts
 
     # Optional – cache TL install between runs (saves ~2 min)
     - name: Cache TeX Live
