@@ -21,9 +21,8 @@ jobs:
     runs-on: ubuntu-latest # <-- ADJUST THIS to your available large runner label if needed
     timeout-minutes: 180            # hard stop to protect budget
     env:
-      # Use the tmpfs ramdisk on the large runner for scratch
-      # Runner-local scratch that is always writable and auto-cleaned
-      SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
+      # Runner-local scratch path is now defined at the step level
+      # SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
       # Keep other env vars from the detailed example if needed
       PYTHONUNBUFFERED: "1"
       DB_FILE: runs/pauling.sqlite  # Assuming you want the checkpoint DB
@@ -70,6 +69,8 @@ jobs:
 
     # 5 Prepare scratch root
     - name: Prepare scratch root
+      env:
+        SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
       shell: bash
       run: |
         echo "Ensuring scratch root directory exists: ${{ env.SAPTASE_SCRATCH_ROOT }}"
@@ -77,6 +78,8 @@ jobs:
 
     # 6 Run the sweep using local_parallel mode
     - name: Execute sweep via SAPTASE
+      env:
+        SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
       shell: bash -l {0} # Use login shell for conda env
       run: |
         echo "Running SAPTASE sweep..."
@@ -89,6 +92,8 @@ jobs:
     # 7 Compress results (scratch + runs dir)
     # Be mindful of artifact size limits (check GitHub docs)
     - name: Tar results
+      env:
+        SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_scratch"
       if: always() # Run even if previous steps fail to capture logs/db
       shell: bash
       run: |
