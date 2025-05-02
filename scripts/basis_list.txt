@@ -1,0 +1,12 @@
+jun-cc-pVDZ
+aug-cc-pVDZ
+jul-cc-pVDZ
+jun-cc-pVTZ
+aug-cc-pVTZ
+jul-cc-pVTZ
+jun-cc-pVQZ
+aug-cc-pVQZ
+def2-SVPD
+def2-TZVPD
+def2-QZVPD
+def2-TZVPPD
