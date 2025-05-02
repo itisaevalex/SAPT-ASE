@@ -43,6 +43,7 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Corrected assertions in `tests/test_cli_run.py::test_cli_run_local_dask_success` to check the database by `task_id` instead of `run_id` and to check the correct scratch subdirectory path.
 - Added `--keep-scratch` flag to the CLI command in `test_cli_run_local_dask_success` to prevent premature deletion of scratch directories needed for assertions.
 - Resolved intermittent Dask `LocalCluster` leaks reported by test fixtures (`assert_no_leaked_dask_cluster`, `assert_no_cluster_leak_per_test`) by ensuring `DaskExecutor.close` explicitly drops cluster/client references and calls `gc.collect()`.
+- **Resolved persistent Dask `LocalCluster` leaks** in stress tests by ensuring the test correctly utilizes the `DaskExecutor` context manager and passes the scheduler address (not the client object) to `SaptWorkflow.run_dask`, and by refining `DaskExecutor.__exit__` to use `dask.distributed.utils.sync` for robust asynchronous cleanup.
 
 ---
 
