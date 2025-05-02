@@ -77,12 +77,15 @@ def test_dask_many_tasks_stress(tmp_path: Path):
         gc.collect()
         # Poll for removal from _instances
         while cluster_instance in LocalCluster._instances:
-            if time.monotonic() - start_time > 2.0:
-                logger.warning(f"Stress test cluster {cluster_addr} still in _instances after 2s timeout.")
+            # Extend timeout to 6 seconds
+            if time.monotonic() - start_time > 6.0:
+                logger.warning(f"Stress test cluster {cluster_addr} still in _instances after 6s timeout.")
+                # Optionally fail the test here if the leak is critical
+                # pytest.fail(f"Cluster {cluster_addr} leak detected after 6s timeout")
                 break
             logger.debug(f"Waiting for stress test cluster {cluster_addr} to leave _instances...")
             gc.collect()
-            time.sleep(0.05)
+            time.sleep(0.05)   # give weak-ref a chance to clear
         else:
              logger.debug(f"Stress test cluster {cluster_addr} successfully removed from _instances.")
 

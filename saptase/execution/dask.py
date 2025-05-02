@@ -17,6 +17,7 @@ import os
 import gc
 import asyncio
 import time
+import inspect # Added for isawaitable
 from dask.distributed.utils import sync
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -63,10 +64,12 @@ class DaskExecutor:
         n_workers
             Number of workers when creating a *new* LocalCluster.
         """
+        self._cluster: Optional[LocalCluster] = None # Explicitly type hint
+        self.client: Optional[Client] = None # Explicitly type hint
+
         # Accept passing an *existing* Client instance (unit-tests convenience)
         if isinstance(scheduler, Client):
             self.client = scheduler
-            self._cluster = None
             logger.debug("Using provided Dask Client instance (%s)", scheduler)
 
         elif scheduler is None:
@@ -101,60 +104,64 @@ class DaskExecutor:
     # ---------------------------------------------------------------------
     def submit_task(self, fn: Callable[..., Any], *args: Any) -> "Future[Any]":
         """Submit a function with *args* exactly as in ProcessPoolExecutor path."""
+        if not self.client:
+            raise RuntimeError("DaskExecutor has been closed and cannot submit tasks.")
         return self.client.submit(fn, *args)
 
-    def close(self) -> None:
-        """Close client and *owned* cluster (if any)."""
-        try:
-            if self.client:
-                logger.debug(
-                    f"Attempting to close Dask client: {self.client.dashboard_link if hasattr(self.client, 'dashboard_link') else self.client}"
-                )
-                # Give client a moment to close gracefully
-                self.client.close(timeout=5)
-                logger.debug(f"Dask client closed.")
-                self.client = None
-        except Exception as client_close_err:
-            logger.warning(f"Error closing Dask client: {client_close_err}")
-
-        if self._cluster is not None:
-            # Store the instance and address before potential errors/setting to None
-            cluster_to_close = self._cluster
-            cluster_addr = cluster_to_close.scheduler_address
-            logger.debug(
-                f"Attempting to close owned Dask cluster: {cluster_addr}"
-            )
+    async def close(self) -> None:
+        """
+        Coroutine that **awaits** full shutdown of the client *and* cluster.
+        Making this async is crucial because `LocalCluster.close()` is itself
+        asynchronous – it returns before the scheduler & workers are gone.
+        """
+        if self.client:
+            # Client.close is synchronous
+            # Wrap in try/except as it might raise if already closed/closing
             try:
-                # Close the cluster synchronously, waiting for workers
-                self._cluster.close(timeout=10)
-                logger.debug(f"Closed owned Dask cluster: {cluster_addr}")
-                self._cluster = None # Set the attribute to None
+                self.client.close(timeout=5) # Keep timeout for client
+                logger.debug(f"Dask client closed.")
+            except Exception as client_close_err:
+                 logger.warning(f"Error closing Dask client (might be expected if cluster shut down first): {client_close_err}")
+            finally:
+                self.client = None
 
-                # --- Wait for weakref removal --- 
-                start_time = time.monotonic()
-                gc.collect() # Initial collection
-                # Poll for removal from _instances, max ~2 seconds
-                while cluster_to_close in LocalCluster._instances:
-                    if time.monotonic() - start_time > 2.0:
-                        logger.warning(f"Cluster {cluster_addr} still in _instances after 2s timeout.")
-                        break
-                    logger.debug(f"Waiting for cluster {cluster_addr} to leave _instances...")
-                    gc.collect() # Collect frequently
-                    time.sleep(0.05) # Short sleep
+        if self._cluster:
+            cluster_to_close = self._cluster
+            cluster_addr = "unknown" # Default in case of early error
+            try:
+                cluster_addr = cluster_to_close.scheduler_address
+                logger.debug(f"Attempting to await close for owned Dask cluster: {cluster_addr}")
+                # LocalCluster.close() is *sometimes* a coroutine, sometimes None.
+                maybe_coro = cluster_to_close.close() 
+                if inspect.isawaitable(maybe_coro):
+                    await maybe_coro
+                    logger.debug(f"Successfully awaited close for owned Dask cluster: {cluster_addr}")
                 else:
-                     logger.debug(f"Cluster {cluster_addr} successfully removed from _instances.")
-                # --- End wait ---
+                     # synchronous path – give Dask's background threads a moment
+                    logger.debug(f"Cluster close returned None (synchronous); adding small sleep.")
+                    await asyncio.sleep(0.05)
+
+                # wait (max 5 s) for weak-ref to disappear from LocalCluster._instances
+                deadline = time.monotonic() + 5.0
+                while cluster_to_close in getattr(LocalCluster, "_instances", set()):
+                    if time.monotonic() > deadline:
+                        logger.warning(
+                            f"LocalCluster {cluster_addr} still present in _instances after 5 s timeout."
+                        )
+                        break
+                    #logger.debug(f"Polling: Cluster {cluster_addr} still in _instances...") # Verbose
+                    gc.collect()
+                    await asyncio.sleep(0.05)
+                else:
+                    logger.debug(f"Polling: Cluster {cluster_addr} successfully removed from _instances.")
 
             except Exception as cluster_close_err:
-                logger.warning(
-                    # Use stored address here
-                    f"Error during closing/cleanup of owned Dask cluster {cluster_addr}: {cluster_close_err}"
-                )
-                # Ensure self._cluster is None even if close failed partially
-                self._cluster = None
+                logger.warning(f"Error awaiting/polling close for owned Dask cluster {cluster_addr}: {cluster_close_err}")
             finally:
-                 # Double ensure it's None
-                 self._cluster = None
+                # drop our strong reference so GC can reap the object
+                self._cluster = None
+                # Encourage weak-ref cleanup *now*, so _instances clears promptly
+                gc.collect()
         else:
             logger.debug("No owned Dask cluster to close.")
 
@@ -163,7 +170,14 @@ class DaskExecutor:
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        self.close()
+        # Run the async close method synchronously
+        try:
+            asyncio.run(self.close())
+        except RuntimeError as e:
+            # Handle cases where asyncio.run() cannot be called (e.g., loop already running)
+            # In such cases, maybe log a warning or try a different approach if needed.
+            # For now, just log if running into issues.
+            logger.error(f"Error running async close in DaskExecutor.__exit__: {e}")
 
     # Convenience for tests
     def __getattr__(self, item):  # proxy everything else to Client
