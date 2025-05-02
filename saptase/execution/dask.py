@@ -171,7 +171,7 @@ async def really_close(
             # Check _instances one last time for logging clarity
             final_instances = getattr(LocalCluster, "_instances", set())
             if cluster_ref() in final_instances:
-                logger.error(
+                logger.info(
                     f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!"
                 )
             else:
