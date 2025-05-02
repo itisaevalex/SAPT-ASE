@@ -16,6 +16,7 @@ import logging
 import os
 import gc
 import asyncio
+import time
 from dask.distributed.utils import sync
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -117,8 +118,9 @@ class DaskExecutor:
             logger.warning(f"Error closing Dask client: {client_close_err}")
 
         if self._cluster is not None:
-            # Store address before potential errors/setting to None
-            cluster_addr = self._cluster.scheduler_address
+            # Store the instance and address before potential errors/setting to None
+            cluster_to_close = self._cluster
+            cluster_addr = cluster_to_close.scheduler_address
             logger.debug(
                 f"Attempting to close owned Dask cluster: {cluster_addr}"
             )
@@ -126,17 +128,33 @@ class DaskExecutor:
                 # Close the cluster synchronously, waiting for workers
                 self._cluster.close(timeout=10)
                 logger.debug(f"Closed owned Dask cluster: {cluster_addr}")
-                self._cluster = None
-                # Force garbage collection and allow async tasks to finish
-                gc.collect()
-                loop = asyncio.get_event_loop()
-                # Use standard asyncio run_until_complete
-                loop.run_until_complete(asyncio.sleep(0.2))
+                self._cluster = None # Set the attribute to None
+
+                # --- Wait for weakref removal --- 
+                start_time = time.monotonic()
+                gc.collect() # Initial collection
+                # Poll for removal from _instances, max ~2 seconds
+                while cluster_to_close in LocalCluster._instances:
+                    if time.monotonic() - start_time > 2.0:
+                        logger.warning(f"Cluster {cluster_addr} still in _instances after 2s timeout.")
+                        break
+                    logger.debug(f"Waiting for cluster {cluster_addr} to leave _instances...")
+                    gc.collect() # Collect frequently
+                    time.sleep(0.05) # Short sleep
+                else:
+                     logger.debug(f"Cluster {cluster_addr} successfully removed from _instances.")
+                # --- End wait ---
+
             except Exception as cluster_close_err:
                 logger.warning(
                     # Use stored address here
-                    f"Error closing owned Dask cluster {cluster_addr}: {cluster_close_err}"
+                    f"Error during closing/cleanup of owned Dask cluster {cluster_addr}: {cluster_close_err}"
                 )
+                # Ensure self._cluster is None even if close failed partially
+                self._cluster = None
+            finally:
+                 # Double ensure it's None
+                 self._cluster = None
         else:
             logger.debug("No owned Dask cluster to close.")
 

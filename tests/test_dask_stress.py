@@ -15,6 +15,7 @@ import asyncio # Added for sleep
 from dask.distributed.utils import sync # Added for Dask sync
 from pathlib import Path
 from typing import List
+import logging
 
 import numpy as np
 import pytest
@@ -23,6 +24,7 @@ from saptase.core.backend import SaptBackend
 from saptase.core.models import Molecule, SaptResult, SaptTask
 from saptase.core.orchestrator import SaptWorkflow
 
+logger = logging.getLogger(__name__)
 
 class TrivialBackend(SaptBackend):
     """Backend that *always* succeeds instantly (no external deps)."""
@@ -62,14 +64,28 @@ def test_dask_many_tasks_stress(tmp_path: Path):
 
     # --- Run via Dask ---
     t0 = time.perf_counter()
+    cluster_instance = None
     with LocalCluster(n_workers=4, threads_per_worker=1, asynchronous=False) as cluster:
+        cluster_instance = cluster # Keep a reference to the instance
         with Client(cluster):
             wf.run_dask(max_workers=4)
+
     # Ensure cluster is fully cleaned up before leak check
-    gc.collect()
-    loop = asyncio.get_event_loop() # Get loop
-    # Use standard asyncio run_until_complete
-    loop.run_until_complete(asyncio.sleep(0.2))
+    if cluster_instance:
+        cluster_addr = cluster_instance.scheduler_address
+        start_time = time.monotonic()
+        gc.collect()
+        # Poll for removal from _instances
+        while cluster_instance in LocalCluster._instances:
+            if time.monotonic() - start_time > 2.0:
+                logger.warning(f"Stress test cluster {cluster_addr} still in _instances after 2s timeout.")
+                break
+            logger.debug(f"Waiting for stress test cluster {cluster_addr} to leave _instances...")
+            gc.collect()
+            time.sleep(0.05)
+        else:
+             logger.debug(f"Stress test cluster {cluster_addr} successfully removed from _instances.")
+
     runtime = time.perf_counter() - t0
 
     # Assert time budget (should be < 20 s easily)

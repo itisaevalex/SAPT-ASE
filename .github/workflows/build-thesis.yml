@@ -9,68 +9,72 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest          # free 2-core runner under GitHub Pro minutes
+    runs-on: ubuntu-latest          # 2-core runner
     timeout-minutes: 30
 
     steps:
+    #------------------------------------------------------------
+    # 0) Checkout repository
+    #------------------------------------------------------------
     - name: Checkout repo
       uses: actions/checkout@v4
 
     #------------------------------------------------------------
-    # 1) Render any Mermaid *.mmd diagrams to SVG before LaTeX
+    # 1) Mermaid ► SVG  (figures needed by LaTeX)
     #------------------------------------------------------------
     - name: Install mermaid-cli
       run: npm install -g @mermaid-js/mermaid-cli
 
-    - name: DEBUG – Show workflow file content on runner
-      run: |
-        echo "--- Workflow file content START ---"
-        cat .github/workflows/build-thesis.yml
-        echo "--- Workflow file content END ---"
-
-    - name: Convert .mmd to .svg
-      # Using a while loop instead of xargs to avoid potential interpretation issues.
-      # Adding --no-sandbox for Puppeteer in CI environment.
+    - name: Convert .mmd ▶︎ .svg
       run: |
         echo '{ "args": ["--no-sandbox"] }' > mmdc-puppeteer-config.json
-        find docs/thesis/figs -name '*.mmd' -print0 | while IFS= read -r -d $'\0' FILE; do
-          outfile="${FILE%.*}.svg"
-          echo "Converting [$FILE] to [$outfile]"
-          mmdc -i "$FILE" -o "$outfile" --puppeteerConfigFile mmdc-puppeteer-config.json
-        done
-        rm mmdc-puppeteer-config.json   # Clean up temp config file
+        find docs/thesis/figs -name '*.mmd' -print0 |
+          while IFS= read -r -d '' FILE; do
+            out="${FILE%.*}.svg"
+            echo "Converting $FILE → $out"
+            mmdc -i "$FILE" -o "$out" --puppeteerConfigFile mmdc-puppeteer-config.json
+          done
+        rm mmdc-puppeteer-config.json
 
     #------------------------------------------------------------
-    # 2) Compile LaTeX with latexmk inside a *small* TeX Live scheme
-    #    (brings pdflatex/xelatex/luatex binaries)
+    # 2) TeX-Live  (cache first, then install the packages we need)
     #------------------------------------------------------------
-    - name: Set up TeX Live
+    - name: Cache TeX-Live installation         # restore first!
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/setup-texlive-action   # where the action installs TL
+        key: texlive-2025-full                         # bump each year
+
+    - name: Set-up TeX-Live (+latexmk & friends)
       uses: teatimeguest/setup-texlive-action@v3
       with:
-        scheme: small          # <-- brings engine binaries
         packages: |
           latexmk
           amsmath
           amsfonts
-          lm   # Latin Modern fonts
+          lm                # Latin Modern fonts
 
-    # Optional – cache TL install between runs (saves ~2 min if unchanged)
-    - name: Cache TeX Live
-      uses: actions/cache@v4
-      with:
-        path: /usr/local/texlive
-        key: texlive-2024-small          # bump yearly
+    # → the action intentionally does **not** modify $PATH.
+    - name: Add TeX-Live bin directory to PATH
+      # `tlmgr` lives in …/bin/<arch>/ ; we prepend that to PATH for later steps.
+      run: |
+        TEXBIN="$(dirname "$(which tlmgr)")"
+        echo "TEXBIN=$TEXBIN"
+        echo "$TEXBIN" >> "$GITHUB_PATH"
 
-    - name: Build PDF with latexmk
+    #------------------------------------------------------------
+    # 3) Build PDF with latexmk
+    #------------------------------------------------------------
+    - name: Build thesis.pdf
       working-directory: docs/thesis
       run: |
         latexmk -pdf -interaction=nonstopmode -halt-on-error thesis.tex
-        latexmk -c                     # clean aux files (optional)
+        latexmk -c   # optional: clean aux files
 
     #------------------------------------------------------------
-    # 3) Upload the finished thesis.pdf
+    # 4) Upload artefact
     #------------------------------------------------------------
-    - name: Publish artifact
+    - name: Publish PDF artefact
       uses: actions/upload-artifact@v4
       with:
         name: thesis-pdf
