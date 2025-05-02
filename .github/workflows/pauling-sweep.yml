@@ -72,8 +72,8 @@ jobs:
       shell: bash -l {0} # Use login shell for conda env
       run: |
         echo "Running SAPTASE sweep..."
-        # Use -w for workers based on CLI definition
-        saptase run sweep.yml \
+        # Invoke via python -m for robustness in CI environment
+        python -m saptase.cli run sweep.yml \
             --mode local_parallel \
             -w $(nproc)
         # Scratch root is handled by SAPTASE_SCRATCH_ROOT env var

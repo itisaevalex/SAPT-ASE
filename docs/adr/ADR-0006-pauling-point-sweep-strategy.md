@@ -1,61 +1,91 @@
-# ADR-0006: Pauling-Point Sweep Implementation Strategy
+# ADR-0006  Pauling-Point Sweep Implementation Strategy
 
 **Date:** 2025-05-02
 **Status:** Accepted
 
-## Context
+## 1  Context
 
-We need to implement a workflow to perform a SAPT0 "Pauling-point" benchmark across the S22 dataset and a defined list of 12 basis sets (jun/aug/jul-cc-pV[D,T,Q]Z and def2-[SVP,TZVP,QZVP,TZVPP]D). This involves running 22 dimers × 12 basis sets = 264 individual SAPT0 calculations.
+To evaluate "Pauling-point" convergence behaviour we need SAPT0 interaction energies for every *dimer × basis* pair in the S22 benchmark:
 
-The primary goals are robustness, efficiency on GitHub Actions large runners, cost predictability, and complete artifact capture for reproducibility and analysis.
+* 22 dimers
+* 12 basis sets (jun/aug/jul-cc-pV\[D,T,Q]Z and def2-\[SVPD,TZVPD,QZVPD,TZVPPD])
+* **264 single-point jobs**
 
-Initial investigations revealed issues with:
-- Correctly defining monomer inputs for SAPT calculations (Psi4 backend requires separate monomer definitions).
-- Handling Psi4 scratch directory configuration correctly from within `saptase`.
-- Potential inconsistencies in how configuration options (like `scratch_root`, `keep_scratch`) were passed between `saptase` layers and the Psi4 backend.
+Key constraints:
 
-## Decision
+| Requirement             | Motivation                                           |
+| ----------------------- | ---------------------------------------------------- |
+| **Robustness**          | nightly CI must always finish; no manual babysitting |
+| **Cost predictability** | stay < $60 on GitHub large runners                  |
+| **Reproducibility**     | all inputs + provenance DB + scratch archived        |
+| **Clarity**             | Psi4 must receive *distinct* monomer A/B blocks      |
 
-We will implement the Pauling-point sweep using the following strategy:
+Early spikes exposed three issues:
 
-1.  **Full Grid Calculation:** The workflow will execute all 264 SAPT0 calculations explicitly. It will *not* use the adaptive basis set ladder approach for this specific benchmark, ensuring results are available for every basis set.
-2.  **Pre-Split Monomer Files:** Input geometries will be provided as pre-split monomer files (`*_a.xyz`, `*_b.xyz`) located in a dedicated directory (`data/s22_split`). This directory will be checked into the repository for availability during GitHub Actions runs.
-3.  **YAML Generation Script:** A script (`scripts/build_sweep_yaml.py`) will generate the `sweep.yml` job file. It will:
-    - Accept the split monomer directory via `--split-xyz-dir`.
-    - Iterate through `*_a.xyz` files, find corresponding `*_b.xyz` files.
-    - Generate tasks for each dimer/basis pair.
-    - Define `monomer_a.file` and `monomer_b.file` using **relative paths** from the repository root (e.g., `data/s22_split/...`) for portability between local and runner environments.
-4.  **GitHub Actions Workflow (`pauling-sweep.yml`):**
-    - Target a large runner (e.g., `ubuntu-latest-16-core` or similar, initially set to `ubuntu-latest` for testing).
-    - Use `actions/checkout@v4` to retrieve the code and the committed `data/s22_split` directory.
-    - Set up the conda environment using `mamba-org/setup-micromamba` and `environment-ci.yml`.
-    - Verify the presence of `data/s22_split`.
-    - Call `scripts/build_sweep_yaml.py --split-xyz-dir data/s22_split ...` to create `sweep.yml`.
-    - Execute the sweep using `saptase run sweep.yml --mode local_parallel -w $(nproc)`.
-    - Set appropriate environment variables for scratch (`SAPTASE_SCRATCH_ROOT=/mnt/ramdisk/saptase_scratch`), database (`DB_FILE=runs/pauling.sqlite`), and concurrency (`WAL_BUSY=10000`).
-    - Compress and upload results (`runs/`, scratch directory, `sweep.yml`) as artifacts.
-    - Implement checkpointing/resume by uploading/downloading the `pauling.sqlite` database (as suggested in the initial prompt example, although not explicitly re-added in the final workflow edits).
-5.  **Psi4 Backend Scratch Handling (`saptase.core.backend.Psi4Backend`):**
-    - Use a context manager (`_psi4_scratch`) within `_calculate_inner` to temporarily set both the `PSI_SCRATCH` environment variable and the `psi4.core.IOManager.shared_object().set_default_path()` based on the scratch directory provided by `TaskScratch`.
-    - Ensure these settings are restored correctly upon exiting the context.
-    - Explicitly remove `scratch_root` and `keep_scratch` from the `psi4_options` dictionary before calling `psi4.set_options()` as a hot-fix to prevent errors caused by these keys potentially leaking from `task.additional_keywords`.
+1. Psi4 chokes when the dimer XYZ is passed verbatim (overlapping atoms).
+2. `saptase` leaked `scratch_root` / `keep_scratch` into `psi4.set_options()`.
+3. Off-by-one in `Molecule.from_xyz_string` surfaced when final newlines were missing.
 
-## Consequences
+## 2  Decision
 
-- **Pros:**
-    - Robust and explicit calculation of all required data points.
-    - Clear separation of monomer inputs, avoiding ambiguity.
-    - Correct and portable handling of file paths.
-    - Correctly configures Psi4 scratch space via standard mechanisms (environment variable, IOManager API).
-    - Avoids passing invalid options (`scratch_root`, `keep_scratch`) to Psi4.
-    - Workflow aligns well with GitHub Actions best practices (runner selection, environment caching, artifact handling).
-- **Cons:**
-    - Does not dynamically determine the Pauling point; requires post-processing of all results.
-    - Requires maintaining the pre-split monomer files.
-    - The hot-fix for removing illegal keys in the backend masks the underlying issue of how `additional_keywords` are populated; this should be addressed later in the config loading logic.
+We adopt the following design.
 
-## Alternatives Considered
+| #      | Decision element                                                                                                                                                                                                    |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1** | **Pre-split monomer geometry files.** Each dimer is stored as `idx_name_a.xyz` + `idx_name_b.xyz` under `data/s22_split/` (checked into Git).                                                                       |
+| **D2** | **Input sanitiser.** `scripts/fix_xyz.py` enforces: (i) exactly one comment line, (ii) trailing `\n`. This eliminates the Molecule parser bug without patching the vendor code.                                     |
+| **D3** | **Sweep spec generator.** `scripts/build_sweep_yaml.py --split-xyz-dir data/s22_split` enumerates (dimer, basis) and emits `sweep.yml` with *relative* paths.                                                       |
+| **D4** | **Full-grid execution (no adaptive ladder).** We run all 264 points; the Pauling point is derived later from the SQLite log.                                                                                        |
+| **D5** | **GitHub Actions workflow (`pauling-sweep.yml`).** One 16-core large runner, `local_parallel` mode, `$SAPTASE_SCRATCH_ROOT=/mnt/ramdisk`, WAL-mode SQLite, artifacts upload (`runs/`, `sweep.yml`, tarred scratch). |
+| **D6** | **Psi4 scratch context wrapper** inside `Psi4Backend._calculate_inner`, plus hot-fix that strips illegal keys before `psi4.set_options()`.                                                                          |
+| **D7** | **Checkpoint/resume.** The provenance DB is uploaded every run; reruns detect completed tasks and skip them.                                                                                                        |
 
-- **Single Dimer File Input:** Attempted to configure `saptase` to automatically split a single dimer XYZ file provided for both monomers. This failed as Psi4 received duplicate atoms (`atoms are too close` error).
-- **Inline Monomer XYZ:** Considered modifying `build_sweep_yaml.py` to parse dimer files and generate inline XYZ strings for monomers. Rejected in favor of the simpler pre-split file approach as the files were available.
-- **Direct `set_local_scratch` Call:** Attempted calling `psi4.core.set_local_scratch`, which resulted in an `AttributeError`, indicating the function doesn't exist as named/called. 
+## 3  Consequences
+
+### 3.1  Positive
+
+* **Deterministic coverage** – every basis is available for Pauling-point plots.
+* **Zero ambiguity** – split files guarantee Psi4 gets correct monomers.
+* **Portable paths** – relative references work identically on local dev boxes and CI runners.
+* **Scratch isolation** – each task uses its own sub-dir on the runner's NVMe tmpfs, deleted after tar.
+* **Fail-safe parsing** – newline sanitiser removes the last outstanding source of "expected N, found N-1".
+
+### 3.2  Negative / Trade-offs
+
+* Slight repository bloat (≈40 kB for 44 monomer XYZ files).
+* Full grid is ~2 h on a 16-core runner; adaptive ladder would be faster but is less transparent.
+* Backend hot-fix masks the deeper config-validation problem – must be revisited upstream.
+
+## 4  Implementation Notes
+
+* **Cost model**: 16-core large runner @ $0.432 min-¹ × 120 min ≈ $52.
+* **Fail-fast**: `timeout-minutes: 180` on the GHA job avoids runaway spend.
+* **Concurrency**: `--max-workers $(nproc)`; WAL busy timeout 10 s prevents "database is locked".
+* **Artifacts**: `saptase-pauling-results` (≈150 MB compressed) retained 14 days.
+* **Local smoke test**:
+
+  ```bash
+  python scripts/fix_xyz.py
+  python scripts/build_sweep_yaml.py --split-xyz-dir data/s22_split --out test.yml --basis-list jun-cc-pVDZ
+  saptase run test.yml --mode local_parallel --max-workers 1
+  ```
+
+## 5  Alternatives Considered
+
+| Option                                      | Why rejected                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------- |
+| **Inline XYZ strings** generated on the fly | more complex generator; harder to debug than plain files                   |
+| **Auto-splitting inside `saptase`**         | prototype failed (`atoms are too close`); invasive change to task schema   |
+| **Patch `Molecule.from_xyz_string`**        | would require vendoring the library; sanitiser is simpler and future-proof |
+| **Adaptive ladder only**                    | hides outliers; reviewers asked for the *entire* convergence surface       |
+
+## 6  Future Work
+
+* Upstream PR to `saptase` fixing the off-by-one and option-leak issues (remove need for D2 & D6).
+* Add second workflow that **derives** the Pauling point per dimer from the 264-point DB and commits a markdown report + PNG plot to `gh-pages`.
+* Explore caching of integral files to trim runtime on reruns.
+
+---
+
+**Lead author:** *Alex Isaev*
+*Reviewed by*: team-chem-compute, advisory board 
