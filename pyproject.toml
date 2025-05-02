@@ -48,6 +48,9 @@ dev = [
 [tool.setuptools_scm]
 write_to = "saptase/_version.py"
 
+[tool.setuptools]
+packages = ["saptase"]
+
 [tool.black]
 line-length = 100
 target-version = ["py38", "py39", "py310"]
