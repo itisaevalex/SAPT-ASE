@@ -6,7 +6,10 @@ import re
 from abc import ABC, abstractmethod
 from importlib import import_module  # Added for import_module
 from types import ModuleType  # Added for type hint
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from pathlib import Path  # Ensure Path is imported
+import shutil  # Import shutil
+import contextlib # Import contextlib
 
 from saptase.core.scratch import TaskScratch
 
@@ -143,6 +146,67 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
         raise ValueError(f"Unsupported backend: {backend_name}")
 
 
+# --- NEW Context Manager --- #
+@contextlib.contextmanager
+def _psi4_scratch(path: Union[str, Path]):
+    """Context manager to temporarily set Psi4 scratch directory via Env Var and API."""
+    # Ensure path is string for environment variable
+    str_path = str(path)
+    iomgr = None
+    original_psi_scratch_env = os.environ.get("PSI_SCRATCH")
+    original_iomgr_path = ""
+
+    try:
+        # Attempt to get IOManager and current path (robust against missing psi4)
+        if psi4 and hasattr(psi4, 'core') and hasattr(psi4.core, 'IOManager'):
+            try:
+                iomgr = psi4.core.IOManager.shared_object()
+                original_iomgr_path = iomgr.get_default_path() # Get original API path
+            except Exception as e:
+                logger.warning(f"Could not get/set IOManager path: {e}")
+                iomgr = None # Ensure iomgr is None if setup failed
+
+        # Set the environment variable
+        os.environ["PSI_SCRATCH"] = str_path
+        # Set via API if possible
+        if iomgr:
+            try:
+                iomgr.set_default_path(str_path)
+                logger.debug(f"Set PSI_SCRATCH env='{str_path}', IOManager path='{str_path}'")
+            except Exception as e:
+                 logger.warning(f"Could not set IOManager path to '{str_path}': {e}")
+        else:
+            logger.debug(f"Set PSI_SCRATCH env='{str_path}' (IOManager not available/used)")
+
+        yield # Let the calculation run
+
+    finally:
+        # --- Restore original settings --- #
+        # Restore Environment Variable
+        if original_psi_scratch_env is None:
+            if "PSI_SCRATCH" in os.environ:
+                del os.environ["PSI_SCRATCH"]
+                restored_env_msg = "Unset"
+            else:
+                 restored_env_msg = "(was not set)"
+        else:
+            os.environ["PSI_SCRATCH"] = original_psi_scratch_env
+            restored_env_msg = f"'{original_psi_scratch_env}'"
+
+        # Restore IOManager path if it was used
+        restored_iomgr_msg = "(IOManager not used/available)"
+        if iomgr:
+            try:
+                # Use original_iomgr_path which could be empty if initial get failed
+                iomgr.set_default_path(original_iomgr_path)
+                restored_iomgr_msg = f"'{original_iomgr_path}'"
+            except Exception as e:
+                logger.warning(f"Could not restore IOManager path to '{original_iomgr_path}': {e}")
+                restored_iomgr_msg = f"(Failed to restore: {e})"
+
+        logger.debug(f"Restored PSI_SCRATCH env={restored_env_msg}, IOManager path={restored_iomgr_msg}")
+
+
 # --- Backend Implementations ---
 
 
@@ -171,13 +235,17 @@ class Psi4Backend(SaptBackend):
         # {"scf_type": "pk", "qc_scf": "true", "maxiter": 50}
     ]
 
-    def __init__(self, memory: str = "2GB"):
+    def __init__(self, memory: str = "2GB", scratch_root: Optional[str] = None, keep_scratch: bool = False):
         """Initialize the Psi4 backend.
 
         Args:
             memory: Memory allocation for Psi4
+            scratch_root: Base directory for scratch files. Defaults to env var or OS tmp.
+            keep_scratch: Whether to keep scratch files after calculation.
         """
         self.memory = memory
+        self.scratch_root = scratch_root  # Store for later use
+        self.keep_scratch = keep_scratch  # Store for later use
         # Initial check for logging purposes, but calculate will re-verify
         if psi4 is None:
             if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
@@ -231,8 +299,7 @@ class Psi4Backend(SaptBackend):
             return False
 
     def calculate(self, task: SaptTask) -> SaptResult:
-        """Perform a SAPT calculation wrapped in a TaskScratch directory."""
-        # Check availability at the start of calculation using the lazy helper
+        """Perform a SAPT calculation, managing the scratch directory lifecycle."""
         if not self._has_psi4():
             # Return a failure result immediately if psi4 isn't available/mocked
             err_msg = "Psi4 is not available or CI_FAST=1"
@@ -244,231 +311,241 @@ class Psi4Backend(SaptBackend):
                 error_code="Psi4Unavailable",
             )
 
-        keep_flag = task.additional_keywords.get("keep_scratch", False)
-        root_flag = task.additional_keywords.get("scratch_root")
-
-        with TaskScratch(task.id, scratch_root=root_flag, keep_scratch=keep_flag):
-            return self._calculate_inner(task)
+        # --- Scratch Directory Management --- #
+        # Determine the root directory to use
+        # Priority: 1) explicit init arg, 2) env var, 3) OS default tmp
+        effective_scratch_root = self.scratch_root or os.getenv("SAPTASE_SCRATCH_ROOT")
+        # TaskScratch now manages the creation/deletion based on keep_scratch
+        # We pass the determined root and the keep_scratch flag from self.
+        with TaskScratch(task.id, scratch_root=effective_scratch_root, keep_scratch=self.keep_scratch) as scratch_manager:
+            # The actual scratch path for this task is available via scratch_manager
+            # Pass the path string directly
+            return self._calculate_inner(task, scratch_manager)
 
     # ------------------------------------------------------------------
     # Actual heavy-lifting (split to keep outer context concise)
     # ------------------------------------------------------------------
-    def _calculate_inner(self, task: SaptTask) -> SaptResult:
+    def _calculate_inner(self, task: SaptTask, task_scratch_dir: Union[str, Path]) -> SaptResult:
         # Create result inside for pure function
         result = SaptResult(task_id=task.id)
 
-        try:
-            # Update task status
-            task.status = TaskStatus.RUNNING
+        # Use the context manager around the core Psi4 logic
+        with _psi4_scratch(task_scratch_dir):
+            try:
+                # Update task status
+                task.status = TaskStatus.RUNNING
 
-            # Initialize Psi4 (psi4 variable is guaranteed non-None here)
-            psi4.core.clean()
-            psi4.set_memory(self.memory)
-            psi4.core.set_output_file("psi4_output.dat", False)
+                # Initialize Psi4 (psi4 variable is guaranteed non-None here)
+                psi4.core.clean()
+                psi4.set_memory(self.memory)
+                # Output file goes to CWD, which IS the task_scratch_dir thanks to TaskScratch
+                psi4.core.set_output_file("psi4_output.dat", False)
 
-            # Create a dimer molecule with fragments
-            a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
-            b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
+                # --- REMOVED psi4.core.set_local_scratch --- #
+                # The _psi4_scratch context manager handles setting scratch paths now.
+                # logger.debug(f"Set Psi4 local scratch to: {task_scratch_dir}") # No longer needed
 
-            # Format the molecule for Psi4 with fragment separation
-            # Charge and multiplicity must be specified per fragment
-            molecule_str = (
-                f"{task.monomer_a.charge} {task.monomer_a.multiplicity}\n"
-                f"{a_xyz}\n"
-                f"--\n"
-                f"{task.monomer_b.charge} {task.monomer_b.multiplicity}\n"
-                f"{b_xyz}\n"
-            )
-
-            # Set up the Psi4 molecule
-            psi4_mol = psi4.geometry(molecule_str)
-
-            # --- SCF Recovery Loop --- #
-            scf_success = False
-            last_scf_error = None
-            for attempt, scf_options in enumerate(self.SCF_RECOVERY_LADDER):
-                logger.info(
-                    f"SCF Attempt {attempt + 1}/{len(self.SCF_RECOVERY_LADDER)} "
-                    f"using options: {scf_options}"
+                # Create a dimer molecule with fragments
+                a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
+                b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[2]  # Skip atom count and comment
+                molecule_str = (
+                    f"{task.monomer_a.charge} {task.monomer_a.multiplicity}\n"
+                    f"{a_xyz}\n"
+                    f"--\n"
+                    f"{task.monomer_b.charge} {task.monomer_b.multiplicity}\n"
+                    f"{b_xyz}\n"
                 )
-                psi4.core.clean_variables()  # Clean variables between attempts
-                psi4.core.clean_options()  # Clean options between attempts
-                # Re-apply base options + task keywords + attempt options
-                psi4_options = {
-                    "basis": task.basis_set,
-                    "scf_type": "df",
-                    "freeze_core": "true",
-                    **task.additional_keywords,
-                    **scf_options,
+                psi4_mol = psi4.geometry(molecule_str)
+
+                # --- SCF Recovery Loop --- #
+                scf_success = False
+                last_scf_error = None
+                for attempt, scf_options in enumerate(self.SCF_RECOVERY_LADDER):
+                    logger.info(
+                        f"SCF Attempt {attempt + 1}/{len(self.SCF_RECOVERY_LADDER)} "
+                        f"using options: {scf_options}"
+                    )
+                    psi4.core.clean_variables()
+                    psi4.core.clean_options()
+                    psi4_options = {
+                        "basis": task.basis_set,
+                        "scf_type": "df",
+                        "freeze_core": "true",
+                        **task.additional_keywords,
+                        **scf_options,
+                    }
+
+                    # -----------------------------------------------------------------
+                    # 🩹 hot-fix: drop options Psi4 does not understand
+                    for bad in ("scratch_root", "keep_scratch"):
+                        psi4_options.pop(bad, None)        # silently discard if present
+                    # -----------------------------------------------------------------
+
+                    # Safety Guard (remains correct)
+                    _illegal = {'scratch_root', 'keep_scratch'}
+                    illegal_keys = _illegal & psi4_options.keys()
+                    if illegal_keys:
+                        # This path indicates a deeper issue if reached
+                        raise ValueError(f"Internal bug: STILL found illegal Psi4 options {illegal_keys} after explicit removal")
+
+                    psi4.set_options(psi4_options)
+
+                    try:
+                        # Run the SAPT calculation
+                        psi4.energy(task.method, molecule=psi4_mol)
+                        scf_success = True
+                        logger.info(f"SCF converged successfully on attempt {attempt + 1}.")
+                        break
+                    except psi4.SCFConvergenceError as e:
+                        logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
+                        last_scf_error = e
+                        continue
+                    except (
+                        psi4.ValidationError,
+                        psi4.BasisSetNotFound,
+                        BasisIncompatible,
+                    ) as e:
+                        error_str = str(e).lower()
+                        if isinstance(e, BasisIncompatible) or re.search(r"basis set|basisset|could not find basis", error_str):
+                            logger.error(f"Basis set error encountered: {e}")
+                            raise BasisIncompatible(str(e)) from e
+                        else:
+                            logger.error(f"Psi4 validation error (non-basis): {e}")
+                            raise PsiProgramCrashed(f"Psi4 validation error: {e}") from e
+                    except (psi4.PsiException, MemoryExceeded) as e:
+                        error_str = str(e).lower()
+                        if isinstance(e, MemoryExceeded) or re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
+                            logger.error(f"Psi4 memory error detected: {e}")
+                            raise MemoryExceeded(str(e)) from e
+                        else:
+                            logger.error(f"Unhandled Psi4 exception: {e}")
+                            raise PsiProgramCrashed(f"Psi4 execution failed: {e}") from e
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
+                            logger.error(f"Potential memory error detected (non-PsiException): {e}")
+                            raise MemoryExceeded(str(e)) from e
+                        logger.error(f"Unexpected error during Psi4 calculation: {e}", exc_info=True)
+                        raise PsiProgramCrashed(f"Unexpected error: {e}") from e
+
+                # --- After SCF Loop --- #
+                if not scf_success:
+                    # Try to format the error similar to Psi4's real __str__ so that
+                    # unit-tests (which assert against this exact string) succeed
+                    if (
+                        last_scf_error
+                        and getattr(last_scf_error, "args", None)
+                        and len(last_scf_error.args) >= 2
+                    ):
+                        err_descr, iterations, *_ = last_scf_error.args
+                        formatted_err = f"Could not converge {err_descr} in {iterations} iterations."
+                    else:
+                        formatted_err = str(last_scf_error)
+
+                    msg = (
+                        f"SCF failed to converge after {len(self.SCF_RECOVERY_LADDER)} attempts. "
+                        f"Last error: {formatted_err}"
+                    )
+                    logger.error(msg)
+                    # Raise ScfFailed with rich context – unit-tests assert on this string
+                    raise ScfFailed(msg) from last_scf_error
+
+                # --- Extract Results (if successful) --- #
+                result.success = True
+                task.status = TaskStatus.COMPLETED
+                # Extract component energies in raw Hartree so that unit-tests match
+                component_map = {
+                    "electrostatics": "SAPT ELST ENERGY",
+                    "exchange": "SAPT EXCH ENERGY",
+                    "induction": "SAPT IND ENERGY",
+                    "dispersion": "SAPT DISP ENERGY",
                 }
-                psi4.set_options(psi4_options)
 
+                for simple_key, var_name in component_map.items():
+                    try:
+                        val = psi4.variable(var_name)
+                    except Exception:
+                        val = None
+                    if val is not None:
+                        result.energies[simple_key] = float(val)
+
+                # total energy handled below
+                # Retrieve Psi4 output path – tolerate older versions & mocks
+                raw_out: Optional[str] = None
                 try:
-                    # Run the SAPT calculation
-                    psi4.energy(task.method, molecule=psi4_mol)
-
-                    # If psi4.energy() completes without error, SCF converged
-                    scf_success = True
-                    logger.info(f"SCF converged successfully on attempt {attempt + 1}.")
-                    break  # Exit the loop on success
-
-                except psi4.SCFConvergenceError as e:
-                    logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
-                    last_scf_error = e
-                    # Loop will continue to next attempt
-                    continue
-                except (
-                    psi4.ValidationError,
-                    psi4.BasisSetNotFound,
-                ) as e:  # Catch BasisSetNotFound too
-                    error_str = str(e).lower()
-                    # Check for keywords indicating a basis set issue
-                    if re.search(r"basis set|basisset|could not find basis", error_str):
-                        logger.error(f"Basis set error encountered: {e}")
-                        raise BasisIncompatible(str(e)) from e
-                    else:
-                        # If validation error is not basis-related, treat as general crash
-                        logger.error(f"Psi4 validation error (non-basis): {e}")
-                        raise PsiProgramCrashed(f"Psi4 validation error: {e}") from e
-                except psi4.PsiException as e:
-                    error_str = str(e).lower()
-                    # Check for memory allocation errors
-                    if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
-                        logger.error(f"Psi4 memory error detected: {e}")
-                        raise MemoryExceeded(str(e)) from e
-                    else:
-                        # General Psi4 exception
-                        logger.error(f"Unhandled Psi4 exception: {e}")
-                        raise PsiProgramCrashed(f"Psi4 execution failed: {e}") from e
-                except Exception as e:
-                    # Catch any other unexpected errors during psi4.energy
-                    error_str = str(e).lower()
-                    if re.search(r"memoryerror|malloc|memory allocation|out of memory", error_str):
-                        logger.error(f"Potential memory error detected (non-PsiException): {e}")
-                        raise MemoryExceeded(str(e)) from e
-                    logger.error(f"Unexpected error during Psi4 calculation: {e}", exc_info=True)
-                    raise PsiProgramCrashed(f"Unexpected error: {e}") from e
-
-            # --- After SCF Loop --- #
-            if not scf_success:
-                # Try to format the error similar to Psi4's real __str__ so that
-                # unit-tests (which assert against this exact string) succeed
-                if (
-                    last_scf_error
-                    and getattr(last_scf_error, "args", None)
-                    and len(last_scf_error.args) >= 2
-                ):
-                    err_descr, iterations, *_ = last_scf_error.args
-                    formatted_err = f"Could not converge {err_descr} in {iterations} iterations."
-                else:
-                    formatted_err = str(last_scf_error)
-
-                msg = (
-                    f"SCF failed to converge after {len(self.SCF_RECOVERY_LADDER)} attempts. "
-                    f"Last error: {formatted_err}"
-                )
-                logger.error(msg)
-                # Raise ScfFailed with rich context – unit-tests assert on this string
-                raise ScfFailed(msg) from last_scf_error
-
-            # --- Extract Results (if successful) --- #
-            result.success = True
-            task.status = TaskStatus.COMPLETED
-            # Extract component energies in raw Hartree so that unit-tests match
-            component_map = {
-                "electrostatics": "SAPT ELST ENERGY",
-                "exchange": "SAPT EXCH ENERGY",
-                "induction": "SAPT IND ENERGY",
-                "dispersion": "SAPT DISP ENERGY",
-            }
-
-            for simple_key, var_name in component_map.items():
-                try:
-                    val = psi4.variable(var_name)  # type: ignore[arg-type]
-                except Exception:
-                    val = None
-                if val is not None:
-                    result.energies[simple_key] = float(val)
-
-            # total energy handled below
-            # Retrieve Psi4 output path – tolerate older versions & mocks
-            raw_out: Optional[str] = None
-            try:
-                raw_out = psi4.core.get_output_file_path()  # type: ignore[attr-defined]
-            except AttributeError:
-                try:
-                    raw_out = psi4.core.get_output_file()  # fallback name in some versions/mocks
+                    raw_out = psi4.core.get_output_file_path()
                 except AttributeError:
-                    raw_out = None
+                    try:
+                        raw_out = psi4.core.get_output_file()
+                    except AttributeError:
+                        raw_out = None
 
-            result.raw_output = raw_out
+                result.raw_output = raw_out
 
-            # Store *raw Hartree* total energy under the canonical key "total" –
-            # unit-tests rely on this.
-            total_h: Optional[float] = None
+                # Store *raw Hartree* total energy under the canonical key "total" –
+                # unit-tests rely on this.
+                total_h: Optional[float] = None
 
-            try:
-                total_h = float(psi4.variable("SAPT TOTAL ENERGY"))  # type: ignore[arg-type]
-            except Exception:  # pragma: no cover
                 try:
-                    total_h = float(psi4.variable("SAPT0 TOTAL ENERGY"))  # SAPT0 spelling
+                    total_h = float(psi4.variable("SAPT TOTAL ENERGY"))
                 except Exception:
-                    total_h = None
+                    try:
+                        total_h = float(psi4.variable("SAPT0 TOTAL ENERGY"))
+                    except Exception:
+                        total_h = None
 
-            if total_h is None:
-                # Fallback: sum per-component kcal values (then convert back)
-                try:
-                    kcal_sum = sum(v for k, v in result.energies.items() if k != "total")
-                    total_h = kcal_sum / 627.509
-                except Exception:  # pragma: no cover – give up
-                    pass
+                if total_h is None:
+                    # Fallback: sum per-component kcal values (then convert back)
+                    try:
+                        kcal_sum = sum(v for k, v in result.energies.items() if k != "total")
+                        total_h = kcal_sum / 627.509
+                    except Exception:  # pragma: no cover – give up
+                        pass
 
-            if total_h is not None:
-                result.energies["total"] = total_h
+                if total_h is not None:
+                    result.energies["total"] = total_h
 
-            # Add basis and method used to the result for provenance
-            result.basis_set = task.basis_set
-            result.method = task.method
+                # Add basis and method used to the result for provenance
+                result.basis_set = task.basis_set
+                result.method = task.method
 
-            return result
+                return result
 
-        except SaptError as e:
-            # Catch SaptErrors raised within the loop (BasisIncompatible, MemoryExceeded, etc.)
-            # And ScfFailed raised after the loop
-            task.status = TaskStatus.FAILED
-            result.success = False
-            result.error_message = str(e)
-            result.error_code = type(e).__name__
-            # Log the basis/method even on failure
-            result.basis_set = task.basis_set
-            result.method = task.method
-            logger.error(f"Task {task.id} failed with {type(e).__name__}: {e}")
-            # For direct calls we *return* the failed result so tests can
-            # inspect it; orchestrator will treat the unsuccessful result as a
-            # failure and escalate accordingly.
-            return result
-        except Exception as e:
-            # Catch any other unexpected errors during setup/teardown
-            task.status = TaskStatus.FAILED
-            result.success = False
-            result.error_message = f"Unexpected backend error: {e}"
-            result.error_code = type(e).__name__  # Or a generic code like 'BackendError'
-            # Log the basis/method even on failure
-            result.basis_set = task.basis_set
-            result.method = task.method
-            logger.critical(
-                f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True
-            )
-            # Wrap unexpected errors in PsiProgramCrashed or a new generic BackendError?
-            # Let's use PsiProgramCrashed for now, assuming it originates from
-            # Psi4 setup/interaction
-            error_msg = f"Unexpected backend error: {e}"
-            raise PsiProgramCrashed(error_msg) from e
-        finally:
-            # Ensure Psi4 output file is closed/cleaned if necessary
-            # psi4.core.clean() # Maybe too aggressive? Cleans everything.
-            # Just ensure the output file handler is released if open
-            pass
+            except SaptError as e:
+                # Catch SaptErrors raised within the loop (BasisIncompatible, MemoryExceeded, etc.)
+                # And ScfFailed raised after the loop
+                task.status = TaskStatus.FAILED
+                result.success = False
+                result.error_message = str(e)
+                result.error_code = type(e).__name__
+                # Log the basis/method even on failure
+                result.basis_set = task.basis_set
+                result.method = task.method
+                logger.error(f"Task {task.id} failed with {type(e).__name__}: {e}")
+                # For direct calls we *return* the failed result so tests can
+                # inspect it; orchestrator will treat the unsuccessful result as a
+                # failure and escalate accordingly.
+                return result
+            except Exception as e:
+                # Catch any other unexpected errors during setup/teardown
+                task.status = TaskStatus.FAILED
+                result.success = False
+                result.error_message = f"Unexpected backend error: {e}"
+                result.error_code = type(e).__name__  # Or a generic code like 'BackendError'
+                # Log the basis/method even on failure
+                result.basis_set = task.basis_set
+                result.method = task.method
+                logger.critical(
+                    f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True
+                )
+                # Wrap unexpected errors in PsiProgramCrashed or a new generic BackendError?
+                # Let's use PsiProgramCrashed for now, assuming it originates from
+                # Psi4 setup/interaction
+                error_msg = f"Unexpected backend error: {e}"
+                raise PsiProgramCrashed(error_msg) from e
+
+        # The result (success or failure) is returned after the _psi4_scratch context exits
+        return result
 
 
 class CamCaspBackend(SaptBackend):

@@ -1,0 +1,14 @@
+execution:
+  mode: local_parallel
+tasks:
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data/s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data/s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1 

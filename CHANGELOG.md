@@ -10,6 +10,8 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `psi4` pytest marker and applied it to tests requiring a real Psi4 installation.
 - Created Conda environment file (`environment-ci.yml`) for CI `real` mode.
 - Added documentation (`docs/ci_psi4.md`) explaining the Psi4 CI setup and local replication.
+- Implemented `_psi4_scratch` context manager in `saptase.core.backend` to correctly set and restore `PSI_SCRATCH` environment variable and `psi4.core.IOManager` path, ensuring proper scratch directory handling.
+- Added ADR-0006 documenting the Pauling-point sweep implementation strategy and rationale.
 
 ### Changed
 - Modified GitHub Actions workflow (`.github/workflows/ci.yml`):
@@ -20,11 +22,28 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     - Conditionally activate conda environment for smoke test in `real` mode.
 - Refactored `saptase.core.backend._has_psi4` logic to correctly handle mocked Psi4 when `CI_FAST=1`.
 - Changed Dask leak guard log level from `ERROR` to `INFO` in `saptase.execution.dask.py`.
+- Modified `scripts/build_sweep_yaml.py` to generate tasks based on pairs of pre-split monomer files (`*_a.xyz`, `*_b.xyz`) located via a `--split-xyz-dir` argument, outputting relative paths for compatibility.
+- Updated `.github/workflows/pauling-sweep.yml`:
+    - Removed previous dimer download/copy logic.
+    - Added a step to verify the existence of the `data/s22_split` directory (assumed checked into the repo).
+    - Changed the "Build job file" step to call `build_sweep_yaml.py` with `--split-xyz-dir data/s22_split`.
+    - Updated environment variables (`SAPTASE_SCRATCH_ROOT`, `DB_FILE`, `WAL_BUSY`) to align with the detailed Pauling-point workflow example.
+- Refactored `saptase.core.backend.Psi4Backend`:
+    - `__init__` now accepts `scratch_root` and `keep_scratch` arguments.
+    - `calculate` uses `TaskScratch` with instance scratch settings.
+    - `_calculate_inner` now accepts `task_scratch_dir` and uses the `_psi4_scratch` context manager.
+    - Removed incorrect `psi4.core.set_local_scratch` call.
 
 ### Fixed
 - Resolved CI failures related to installing Psi4 (`ENOENT` for environment file, invalid `micromamba create` args).
 - Fixed CI smoke test failures in `real` mode (`ModuleNotFoundError`, argument parsing error) by ensuring execution within the activated conda environment.
 - Fixed test failures in `mock` mode (`tests/test_backend.py`, `tests/test_backend_scratch.py`) caused by `CI_FAST=1` prematurely exiting `Psi4Backend.calculate`.
+- Corrected `AttributeError: 'str' object has no attribute 'task_dir'` in `saptase.core.backend.calculate` by passing the `scratch_manager` path string directly to `_calculate_inner`.
+- Addressed `ValueError: Internal bug: illegal Psi4 options {'scratch_root', 'keep_scratch'}` by adding a filter in `saptase.core.backend._calculate_inner` to explicitly remove these keys from `psi4_options` before passing them to `psi4.set_options()`. This serves as a hot-fix pending cleanup of YAML loading logic.
+- Corrected XYZ file parsing bug in `saptase.core.models.Molecule.from_xyz_string` (related to off-by-one error in line counting - fix implemented separately by user).
+
+### Removed
+- Removed previous logic for downloading/unzipping dimer files in `pauling-sweep.yml`.
 
 ## [0.4.0] – 2025-04-24
 

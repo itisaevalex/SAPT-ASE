@@ -21,8 +21,12 @@ jobs:
     runs-on: ubuntu-latest # <-- ADJUST THIS to your available large runner label if needed
     timeout-minutes: 180            # hard stop to protect budget
     env:
-      # Set scratch to runner's temp dir, usually fast SSD
-      SAPTASE_SCRATCH_ROOT: ${{ runner.temp }}/saptase_sweep_scratch
+      # Use the tmpfs ramdisk on the large runner for scratch
+      SAPTASE_SCRATCH_ROOT: /mnt/ramdisk/saptase_scratch
+      # Keep other env vars from the detailed example if needed
+      PYTHONUNBUFFERED: "1"
+      DB_FILE: runs/pauling.sqlite  # Assuming you want the checkpoint DB
+      WAL_BUSY: "10000"
 
     steps:
 
@@ -37,28 +41,18 @@ jobs:
         cache-environment: true # Cache the created environment
         init-shell: bash        # Ensure bash is initialized
 
-    # 3 Prepare sweep input (download optional override, ensure target dir exists)
-    - name: Download and prepare dimers
-      shell: bash -l {0} # Use login shell for conda env
+    # 3 Prepare sweep input (ensure split data directory exists)
+    # This assumes data/s22_split is checked into the repo
+    - name: Verify split data directory
+      shell: bash
       run: |
-        set -e
-        TARGET_XYZ_DIR="s22_xyz" # Default local directory
-        mkdir -p $TARGET_XYZ_DIR
-        if [[ -n "${{ github.event.inputs.dimer_zip_url }}" ]]; then
-          echo "Downloading dimers from ${{ github.event.inputs.dimer_zip_url }}..."
-          curl -L "${{ github.event.inputs.dimer_zip_url }}" -o dimers.zip
-          echo "Unzipping dimers to $TARGET_XYZ_DIR..."
-          unzip -q dimers.zip -d $TARGET_XYZ_DIR
-          rm dimers.zip
+        if [ -d "data/s22_split" ]; then
+          echo "Found data/s22_split directory."
+          ls data/s22_split
         else
-          echo "Using existing/committed dimers in $TARGET_XYZ_DIR..."
-          # Add a check here if the directory must contain files?
-          if [ -z "$(ls -A $TARGET_XYZ_DIR)" ]; then
-             echo "Warning: $TARGET_XYZ_DIR is empty and no URL provided."
-             # Optionally fail: exit 1
-          fi
+          echo "Error: data/s22_split directory not found! Commit this directory to the repo."
+          exit 1
         fi
-        echo "Using XYZ files from $(pwd)/$TARGET_XYZ_DIR"
 
     # 4 Generate YAML job file using the provided script
     - name: Build job file
@@ -67,8 +61,8 @@ jobs:
         echo "Building sweep YAML..."
         # Ensure script is executable if needed: chmod +x scripts/build_sweep_yaml.py
         python scripts/build_sweep_yaml.py \
-          --xyz-dir s22_xyz \
-          --basis-list "${{ github.event.inputs.basis_list }}" \
+          --split-xyz-dir data/s22_split \
+          --basis-list "${{ github.event.inputs.basis_list || '' }}" \
           --out sweep.yml
         echo "Sweep YAML created:"
         cat sweep.yml

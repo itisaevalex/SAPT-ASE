@@ -1,0 +1,14 @@
+execution:
+  mode: local_parallel # Informational, mode set by CLI
+tasks:
+- id: 08_benzene_dimer_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data/s22_split\08_benzene_dimer_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data/s22_split\08_benzene_dimer_tshape_b.xyz
+    charge: 0
+    multiplicity: 1 

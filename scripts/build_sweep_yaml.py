@@ -51,6 +51,7 @@ def main():
         # Decide if this should be an error
 
     tasks = []
+    num_pairs = 0 # Counter for valid pairs
     # Iterate through monomer A files to find corresponding monomer B files
     for file_a in monomer_a_files:
         # Construct the expected filename for monomer B
@@ -60,6 +61,8 @@ def main():
         if not file_b.is_file():
             print(f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}.")
             continue
+        
+        num_pairs += 1 # Found a valid pair
 
         # Create tasks for each basis set for this monomer pair
         for basis in bases:
@@ -67,18 +70,21 @@ def main():
             dimer_name = base_name.replace(" ", "_") # Sanitize name
             task_id = f"{dimer_name}_{basis}"
 
-            # Define monomers using the separate file paths
+            # Define monomers using relative paths
+            monomer_a_relpath = file_a.relative_to(args.split_xyz_dir.parent) # Relative to parent (e.g., 'data')
+            monomer_b_relpath = file_b.relative_to(args.split_xyz_dir.parent)
+
             tasks.append({
                 "id": task_id,
                 "basis_set": basis,
                 "method": args.method,
                 "monomer_a": {
-                    "file": str(file_a.resolve()), # Use absolute path
+                    "file": str(monomer_a_relpath),
                     "charge": args.monomer_a_charge,
                     "multiplicity": args.monomer_a_mult
                 },
                 "monomer_b": {
-                    "file": str(file_b.resolve()), # Use absolute path
+                    "file": str(monomer_b_relpath),
                     "charge": args.monomer_b_charge,
                     "multiplicity": args.monomer_b_mult
                 },
@@ -96,7 +102,8 @@ def main():
         # Use safe_dump for better YAML practices
         yaml_output = yaml.safe_dump(job_config, sort_keys=False)
         args.out.write_text(yaml_output)
-        print(f"Wrote {len(tasks)} tasks to {args.out}")
+        print(f"Generated {len(tasks)} tasks "
+              f"({num_pairs} dimers × {len(bases)} bases) to {args.out}")
     except Exception as e:
         print(f"Error writing YAML file {args.out}: {e}")
         # Decide if you want to sys.exit(1) here
