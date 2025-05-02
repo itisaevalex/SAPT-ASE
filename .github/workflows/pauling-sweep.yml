@@ -85,7 +85,7 @@ jobs:
         # Invoke via python -m for robustness in CI environment
         python -m saptase.cli run sweep.yml \
             --mode local_parallel \
-            -w $(nproc)
+            -w 1 # Reduced workers to 1 to diagnose resource issues
         # Scratch root is handled by SAPTASE_SCRATCH_ROOT env var
 
     # 7 Compress results (scratch + runs dir)
