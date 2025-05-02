@@ -20,6 +20,9 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
+# Import the correct exception path
+from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
+
 from .models import SaptResult, SaptTask, TaskStatus
 
 # Global placeholder for the (optional) Psi4 module.
@@ -387,7 +390,7 @@ class Psi4Backend(SaptBackend):
 
                     # -----------------------------------------------------------------
                     # 🩹 hot-fix: drop options Psi4 does not understand
-                    for bad in ("scratch_root", "keep_scratch"):
+                    for bad in ("scratch_root", "keep_scratch", "recovery_strategy"):
                         psi4_options.pop(bad, None)  # silently discard if present
                     # -----------------------------------------------------------------
 
@@ -414,13 +417,17 @@ class Psi4Backend(SaptBackend):
                         continue
                     except (
                         psi4.ValidationError,
-                        psi4.BasisSetNotFound,
+                        qcdbBasisSetNotFound,
                         BasisIncompatible,
                     ) as e:
                         error_str = str(e).lower()
-                        if isinstance(e, BasisIncompatible) or re.search(
-                            r"basis set|basisset|could not find basis", error_str
-                        ):
+                        # Use the correct exception type from psi4.driver.qcdb.exceptions
+                        basis_exception_type = qcdbBasisSetNotFound
+                        is_basis_error = isinstance(e, BasisIncompatible) or \
+                                         (basis_exception_type and isinstance(e, basis_exception_type)) or \
+                                         re.search(r"basis set|basisset|could not find basis", error_str)
+
+                        if is_basis_error:
                             logger.error(f"Basis set error encountered: {e}")
                             raise BasisIncompatible(str(e)) from e
                         else:

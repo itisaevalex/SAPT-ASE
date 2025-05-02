@@ -21,7 +21,7 @@ from saptase.core.scratch import TaskScratch  # Import TaskScratch
 from saptase.recovery.escalate import EscalationContext  # Import recovery context
 
 from .backend import Psi4Backend, SaptBackend
-from .errors import SaptError  # Import base SaptError
+from .errors import SaptError, BasisIncompatible  # Import base SaptError and BasisIncompatible
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
 
@@ -227,27 +227,13 @@ def _execute_task_for_parallel(
                 time.monotonic() - current_attempt_start_time
             )  # Time for this failed attempt
 
-            # Create a failed result with enough information for logging
-            failed_attempt_result = SaptResult(
-                task_id=task.id,
-                success=False,
-                error_message=str(err),
-                error_code=type(err).__name__,
-                basis_set=task.basis_set,
-                method=task.method,
-            )
-            # Use consistent 0-based attempt numbering throughout the codebase
-            failed_attempt_result.attempt_number = context.attempt_index
-            failed_attempt_result.elapsed_time = elapsed_time
-
-            # Log failed attempt inside scratch directory with fresh connection
-            _ldb = LogDb(db_path)
-            _ldb.log_task_attempt(run_id=run_id, result=failed_attempt_result)
-            _ldb.close()
-
-            # Note: We don't need to call context.record_failure(err) separately anymore
-            # since the refactored can_retry method now does this internally
-            if context.can_retry(err):
+            # ** Immediate failure for BasisIncompatible errors **
+            if isinstance(err, BasisIncompatible):
+                worker_logger.error(f"Task {task.id} failed due to incompatible/missing basis. No retries will be attempted.")
+                final_err = err
+                final_error_code = type(err).__name__
+                # Skip directly to permanent failure logic
+            elif context.can_retry(err):
                 try:
                     retry_task = context.apply(
                         err

@@ -38,7 +38,6 @@ jobs:
       uses: mamba-org/setup-micromamba@v1
       with:
         environment-file: environment-ci.yml   # Use the existing conda env file
-        cache-environment: true # Cache the created environment
         init-shell: bash        # Ensure bash is initialized
 
     # 3 Prepare sweep input (ensure split data directory exists)

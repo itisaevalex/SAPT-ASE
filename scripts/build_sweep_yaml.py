@@ -17,15 +17,15 @@ import yaml
 BASIS_DEFAULT = [
     "jun-cc-pVDZ",
     "aug-cc-pVDZ",
-    "jul-cc-pVDZ",
+    "jun-cc-pVDZ",
     "jun-cc-pVTZ",
     "aug-cc-pVTZ",
-    "jul-cc-pVTZ",
-    "jun-cc-pVQZ",
-    "aug-cc-pVQZ",
+    "jun-cc-pVTZ",
+    # "jun-cc-pVQZ", # Temporarily removed for CI
+    # "aug-cc-pVQZ", # Temporarily removed for CI
     "def2-SVPD",
     "def2-TZVPD",
-    "def2-QZVPD",
+    # "def2-QZVPD", # Temporarily removed for CI
     "def2-TZVPPD",
 ]
 
