@@ -1,1 +1,14 @@
- 
+# environment-ci.yml (Place this in the ROOT of your repository)
+name: saptase-ci
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10 # Match the version used in your matrix/other jobs
+  - psi4>=1.9
+  - pytest
+  - pip             # Needed to run pip install below
+  - numpy           # Add other dependencies needed for real tests
+  - tqdm
+  - dask
+  - distributed
+  # - ruamel.yaml>=0.17,<0.19 # Add if needed by tests
