@@ -1,12 +1,8 @@
 import os
-import time
 
 import pytest
-from dask.distributed import Client, LocalCluster
 from saptase.core.models import Molecule, SaptTask
 from saptase.execution.dask import DaskExecutor
-import numpy as np
-from pathlib import Path
 
 
 @pytest.mark.usefixtures("cleanup")

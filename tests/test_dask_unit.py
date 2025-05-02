@@ -12,7 +12,6 @@ from dataclasses import dataclass
 import pytest
 from saptase.core.models import Molecule, SaptResult, SaptTask, TaskStatus
 from saptase.core.orchestrator import SaptBackend, SaptWorkflow
-from saptase.execution.dask import DaskExecutor
 
 try:
     import dask  # noqa: F401 (import just to check availability)

@@ -12,16 +12,17 @@ also cleanly close everything in a context manager.
 
 from __future__ import annotations
 
+import asyncio
+import gc
+import inspect  # Added for isawaitable
 import logging
 import os
-import gc
-import asyncio
 import time
-import inspect # Added for isawaitable
-import weakref # Potentially needed for handler cleanup logic
-from dask.distributed.utils import sync
-from dask.distributed.comm.core import CommClosedError
+import weakref  # Potentially needed for handler cleanup logic
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+from dask.distributed.comm.core import CommClosedError
+from dask.distributed.utils import sync
 
 if TYPE_CHECKING:
     from saptase.core.models import SaptTask
@@ -53,39 +54,43 @@ def _dummy_worker(task):  # top-level picklable helper for tests
 
 
 # New robust helper function based on supervisor recommendation
-async def really_close(client: Optional[Client], cluster: Optional[LocalCluster], timeout: float = 5.0):
+async def really_close(
+    client: Optional[Client], cluster: Optional[LocalCluster], timeout: float = 5.0
+):
     """Robustly close Client and LocalCluster, waiting for scheduler completion."""
     if not client and not cluster:
         logger.debug("really_close: Nothing to close.")
         return
 
     cluster_addr = "unknown"
-    original_cluster_ref = cluster # Keep original reference for final check
+    original_cluster_ref = cluster  # Keep original reference for final check
     if cluster:
         try:
             cluster_addr = cluster.scheduler_address
         except Exception:
-            pass # Already closed or inaccessible
+            pass  # Already closed or inaccessible
 
     logger.debug(f"really_close: Starting shutdown for cluster {cluster_addr}")
 
     # 1. Flush computations and close client
     if client:
         try:
-            futures = list(client.futures.values()) # Get outstanding futures
+            futures = list(client.futures.values())  # Get outstanding futures
             if futures:
-                 logger.debug(f"really_close: Cancelling {len(futures)} outstanding futures for client {client}")
-                 await client.cancel(futures, force=True)
-                 await asyncio.sleep(0.01) # Give cancel a moment
-            await client.close(timeout=5) 
+                logger.debug(
+                    f"really_close: Cancelling {len(futures)} outstanding futures for client {client}"
+                )
+                await client.cancel(futures, force=True)
+                await asyncio.sleep(0.01)  # Give cancel a moment
+            await client.close(timeout=5)
             logger.debug(f"really_close: Client closed for cluster {cluster_addr}")
         except Exception as e:
             logger.warning(f"really_close: Error closing client for {cluster_addr}: {e}")
         finally:
             # Ensure client reference is removed for GC
-            client = None 
-            del client # Explicit delete just in case
-    
+            client = None
+            del client  # Explicit delete just in case
+
     # 2. Close cluster and wait for scheduler to finish async teardown
     if cluster:
         try:
@@ -99,31 +104,39 @@ async def really_close(client: Optional[Client], cluster: Optional[LocalCluster]
                 logger.debug(f"really_close: Finished awaiting cluster.close() for {cluster_addr}")
             else:
                 # Sync close called, proceed to wait for scheduler
-                 logger.debug(f"really_close: Sync close called for {cluster_addr}")
-            
+                logger.debug(f"really_close: Sync close called for {cluster_addr}")
+
             # Re-fetch scheduler in case cluster.close() replaced it
-            scheduler = getattr(cluster, 'scheduler', None) 
-            if scheduler and hasattr(scheduler, 'finished'):
+            scheduler = getattr(cluster, "scheduler", None)
+            if scheduler and hasattr(scheduler, "finished"):
                 logger.debug(f"really_close: Waiting for scheduler.finished() for {cluster_addr}")
                 await asyncio.wait_for(scheduler.finished(), timeout=timeout)
                 logger.debug(f"really_close: Scheduler finished for {cluster_addr}")
 
         except CommClosedError:
-             logger.debug(f"really_close: Cluster {cluster_addr} CommClosedError during close/wait (likely already closing)." )
+            logger.debug(
+                f"really_close: Cluster {cluster_addr} CommClosedError during close/wait (likely already closing)."
+            )
         except asyncio.TimeoutError:
-            logger.warning(f"really_close: Scheduler for {cluster_addr} did not finish within {timeout:.1f}s timeout.")
+            logger.warning(
+                f"really_close: Scheduler for {cluster_addr} did not finish within {timeout:.1f}s timeout."
+            )
         except Exception as e:
-            logger.warning(f"really_close: Error during cluster close/scheduler wait for {cluster_addr}: {e}")
-    
+            logger.warning(
+                f"really_close: Error during cluster close/scheduler wait for {cluster_addr}: {e}"
+            )
+
     # 3. Extra: stop dashboard if it exists (belt and suspenders)
-    if original_cluster_ref: # Use original ref here
+    if original_cluster_ref:  # Use original ref here
         http_server = getattr(original_cluster_ref, "_http_server", None)
         if http_server:
             try:
                 http_server.stop()
                 logger.debug(f"really_close: Stopped dashboard http_server for {cluster_addr}")
             except Exception as e:
-                logger.warning(f"really_close: Error stopping dashboard http_server for {cluster_addr}: {e}")
+                logger.warning(
+                    f"really_close: Error stopping dashboard http_server for {cluster_addr}: {e}"
+                )
         # Clear ref to server
         http_server = None
 
@@ -135,50 +148,58 @@ async def really_close(client: Optional[Client], cluster: Optional[LocalCluster]
     futures = None
     # Keep weak reference for polling
     cluster_ref = weakref.ref(original_cluster_ref)
-    del original_cluster_ref # Delete the strong reference
-    cluster = None # Clear the local variable reference used in step 2 as well
-    
+    del original_cluster_ref  # Delete the strong reference
+    cluster = None  # Clear the local variable reference used in step 2 as well
+
     # Run GC passes
     gc.collect()
-    await asyncio.sleep(0.01) # Yield after first collect
+    await asyncio.sleep(0.01)  # Yield after first collect
     gc.collect()
-    await asyncio.sleep(0.05) # Short sleep after second collect
-    
+    await asyncio.sleep(0.05)  # Short sleep after second collect
+
     # Poll using the weak reference
     if cluster_ref() is not None:
-        logger.debug(f"Polling: Cluster {cluster_addr} still referenced after GC sweep, starting weakref poll...")
-        deadline = time.monotonic() + timeout # Reuse timeout for poll
+        logger.debug(
+            f"Polling: Cluster {cluster_addr} still referenced after GC sweep, starting weakref poll..."
+        )
+        deadline = time.monotonic() + timeout  # Reuse timeout for poll
         while cluster_ref() is not None and time.monotonic() < deadline:
             gc.collect()
             await asyncio.sleep(0.05)
             # Check if the weakref became None
         if cluster_ref() is not None:
-             # Check _instances one last time for logging clarity
-             final_instances = getattr(LocalCluster, "_instances", set())
-             if cluster_ref() in final_instances:
-                 logger.error(f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!")
-             else:
-                 # This case might be rare - weakref alive but not in _instances?
-                 logger.warning(f"Leak-guard: Cluster {cluster_addr} weakref still alive but NOT in _instances after polling.")
+            # Check _instances one last time for logging clarity
+            final_instances = getattr(LocalCluster, "_instances", set())
+            if cluster_ref() in final_instances:
+                logger.error(
+                    f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!"
+                )
+            else:
+                # This case might be rare - weakref alive but not in _instances?
+                logger.warning(
+                    f"Leak-guard: Cluster {cluster_addr} weakref still alive but NOT in _instances after polling."
+                )
         else:
-             logger.debug(f"Polling: Cluster {cluster_addr} weakref cleared during poll.")
+            logger.debug(f"Polling: Cluster {cluster_addr} weakref cleared during poll.")
     else:
         logger.debug(f"Polling: Cluster {cluster_addr} weakref already cleared before final poll.")
-    
+
     # Explicitly remove from _instances as a final safeguard
-    if original_cluster_ref_obj := cluster_ref(): # Get object if weakref still alive
+    if original_cluster_ref_obj := cluster_ref():  # Get object if weakref still alive
         if hasattr(LocalCluster, "_instances"):
             try:
                 instances_set = getattr(LocalCluster, "_instances")
                 if original_cluster_ref_obj in instances_set:
-                    logger.warning(f"really_close: Explicitly removing cluster {cluster_addr} from _instances after polling.")
+                    logger.warning(
+                        f"really_close: Explicitly removing cluster {cluster_addr} from _instances after polling."
+                    )
                     instances_set.discard(original_cluster_ref_obj)
             except Exception as e:
                 logger.error(f"Error during final explicit _instances.discard: {e}")
 
     # Clean up the weakref itself
     del cluster_ref
-    gc.collect() # One last collect
+    gc.collect()  # One last collect
     logger.debug(f"really_close: Finished cleanup sequence for cluster {cluster_addr}")
 
 
@@ -196,8 +217,8 @@ class DaskExecutor:
         n_workers
             Number of workers when creating a *new* LocalCluster.
         """
-        self._cluster: Optional[LocalCluster] = None # Explicitly type hint
-        self.client: Optional[Client] = None # Explicitly type hint
+        self._cluster: Optional[LocalCluster] = None  # Explicitly type hint
+        self.client: Optional[Client] = None  # Explicitly type hint
 
         # Accept passing an *existing* Client instance (unit-tests convenience)
         if isinstance(scheduler, Client):
@@ -206,15 +227,18 @@ class DaskExecutor:
 
         elif scheduler is None:
             self._cluster = LocalCluster(
-                n_workers=n_workers or os.cpu_count(), 
+                n_workers=n_workers or os.cpu_count(),
                 threads_per_worker=1,
                 # Disable all background servers for reliability in tests
-                dashboard_address=None, 
-                diagnostics_port=None, 
-                services={}
+                dashboard_address=None,
+                diagnostics_port=None,
+                services={},
             )
             self.client = Client(self._cluster)
-            logger.debug("Started LocalCluster with %d workers (all diagnostic services disabled)", len(self._cluster.workers))
+            logger.debug(
+                "Started LocalCluster with %d workers (all diagnostic services disabled)",
+                len(self._cluster.workers),
+            )
         else:
             self._cluster = None
             # Attempt to connect to existing scheduler; fall back gracefully
@@ -252,19 +276,19 @@ class DaskExecutor:
         """
         client_to_close = self.client
         cluster_to_close = self._cluster
-        
+
         # Clear attributes immediately to prevent reuse
         self.client = None
         self._cluster = None
-        
+
         try:
-            await really_close(client_to_close, cluster_to_close) # Call the robust helper
+            await really_close(client_to_close, cluster_to_close)  # Call the robust helper
         except Exception as e:
             # Log error from the helper, but ensure flow continues
             logger.error(f"Error encountered in DaskExecutor.close calling really_close: {e}")
         finally:
             # Ensure attributes are None and encourage GC
-            self.client = None 
+            self.client = None
             self._cluster = None
             # No need to delete client_to_close/cluster_to_close here, they go out of scope
             gc.collect()
@@ -277,10 +301,10 @@ class DaskExecutor:
         # Use dask.distributed.utils.sync to run the async close method
         # Get the loop from the client *before* calling close()
         loop = None
-        cluster_to_clean = self._cluster # Keep ref for final cleanup attempt
+        cluster_to_clean = self._cluster  # Keep ref for final cleanup attempt
         client_to_clean = self.client
 
-        if client_to_clean and hasattr(client_to_clean, 'loop'):
+        if client_to_clean and hasattr(client_to_clean, "loop"):
             loop = client_to_clean.loop
 
         if loop:
@@ -290,10 +314,15 @@ class DaskExecutor:
                 sync(loop, self.close)
                 logger.debug("DaskExecutor.__exit__: sync(loop, self.close) completed.")
             except Exception as e:
-                logger.error(f"Error running async close via dask.utils.sync in DaskExecutor.__exit__: {e}", exc_info=True)
+                logger.error(
+                    f"Error running async close via dask.utils.sync in DaskExecutor.__exit__: {e}",
+                    exc_info=True,
+                )
                 # Fall through to manual cleanup if sync fails
         else:
-            logger.warning("Could not obtain Dask client loop in __exit__, proceeding to manual cleanup.")
+            logger.warning(
+                "Could not obtain Dask client loop in __exit__, proceeding to manual cleanup."
+            )
 
         # --- Manual Cleanup Fallback / Final Check ---
         # This runs if loop wasn't found OR if sync failed (error logged above)
@@ -301,28 +330,36 @@ class DaskExecutor:
         try:
             if client_to_clean:
                 logger.debug(f"__exit__ manual cleanup: Closing client {client_to_clean}")
-                client_to_clean.close(timeout=2) # Short timeout sync close
-                self.client = None # Ensure instance variable is cleared
+                client_to_clean.close(timeout=2)  # Short timeout sync close
+                self.client = None  # Ensure instance variable is cleared
             else:
                 logger.debug("__exit__ manual cleanup: No client object to close.")
 
             if cluster_to_clean:
-                logger.debug(f"__exit__ manual cleanup: Checking/removing cluster {cluster_to_clean} from _instances")
+                logger.debug(
+                    f"__exit__ manual cleanup: Checking/removing cluster {cluster_to_clean} from _instances"
+                )
                 if hasattr(LocalCluster, "_instances"):
                     instances_set = getattr(LocalCluster, "_instances")
                     if cluster_to_clean in instances_set:
                         instances_set.discard(cluster_to_clean)
-                        logger.debug(f"__exit__ manual cleanup: Removed cluster from _instances.")
+                        logger.debug("__exit__ manual cleanup: Removed cluster from _instances.")
                     else:
-                        logger.debug(f"__exit__ manual cleanup: Cluster already gone from _instances.")
+                        logger.debug(
+                            "__exit__ manual cleanup: Cluster already gone from _instances."
+                        )
                 else:
-                    logger.warning("__exit__ manual cleanup: LocalCluster has no _instances attribute?")
-                self._cluster = None # Ensure instance variable is cleared
+                    logger.warning(
+                        "__exit__ manual cleanup: LocalCluster has no _instances attribute?"
+                    )
+                self._cluster = None  # Ensure instance variable is cleared
             else:
                 logger.debug("__exit__ manual cleanup: No cluster object to clean.")
 
         except Exception as e:
-            logger.error(f"Error during manual cleanup in DaskExecutor.__exit__: {e}", exc_info=True)
+            logger.error(
+                f"Error during manual cleanup in DaskExecutor.__exit__: {e}", exc_info=True
+            )
         finally:
             # Final guarantee: set instance vars to None and GC
             self.client = None
@@ -334,14 +371,16 @@ class DaskExecutor:
     def __getattr__(self, item):  # proxy everything else to Client
         # Check if client exists before getattr to avoid AttributeError after close
         if self.client:
-             try:
-                  return getattr(self.client, item)
-             except AttributeError:
-                  # Re-raise if attribute truly doesn't exist on client
-                  raise AttributeError(f"'{type(self.client).__name__}' object has no attribute '{item}'")
+            try:
+                return getattr(self.client, item)
+            except AttributeError:
+                # Re-raise if attribute truly doesn't exist on client
+                raise AttributeError(
+                    f"'{type(self.client).__name__}' object has no attribute '{item}'"
+                )
         else:
-             # Raise an error if trying to access attributes after close
-             raise RuntimeError("DaskExecutor has been closed.")
+            # Raise an error if trying to access attributes after close
+            raise RuntimeError("DaskExecutor has been closed.")
 
     # ------------------------------------------------------------------
     # Simple helper for unit tests – run list[SaptTask] with DummyBackend

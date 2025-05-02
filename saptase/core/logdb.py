@@ -3,10 +3,10 @@
 
 import logging
 import sqlite3
+import time
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-import time
 
 from .models import SaptResult
 

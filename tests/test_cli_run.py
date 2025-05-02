@@ -4,10 +4,7 @@
 import os
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 # Helper to get path to CLI script
 # CLI_PATH is no longer needed for this test

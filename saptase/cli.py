@@ -8,7 +8,7 @@ import json
 import logging
 import os  # For cpu_count
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np  # Needed for Molecule coordinates
 

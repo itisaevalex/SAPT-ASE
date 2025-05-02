@@ -1,25 +1,29 @@
 import asyncio
 import sys
+
 # Switch event loop policy on Windows for Dask compatibility
 if sys.platform.startswith("win"):
     try:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        print("\nINFO: Switched asyncio event loop policy to WindowsSelectorEventLoopPolicy for Dask tests.\n")
+        print(
+            "\nINFO: Switched asyncio event loop policy to WindowsSelectorEventLoopPolicy for Dask tests.\n"
+        )
     except Exception as e:
         print(f"\nWARNING: Failed to switch asyncio event loop policy: {e}\n")
 
 """Test fixtures and utilities for the saptase package."""
 
 import logging
+
 import pytest  # Added for fixture
 from saptase import SaptBackend, SaptResult, SaptTask, TaskStatus
 
 try:  # Optional import for dask leak detection
     from distributed import LocalCluster
-    from distributed.utils_test import cleanup as dask_cleanup_fixture # Import with alias
+    from distributed.utils_test import cleanup as dask_cleanup_fixture  # Import with alias
 except ImportError:
     LocalCluster = None
-    dask_cleanup_fixture = None # Define as None if import fails
+    dask_cleanup_fixture = None  # Define as None if import fails
 
 logger = logging.getLogger(__name__)
 

@@ -646,8 +646,8 @@ class SaptWorkflow:
                 # Dask.as_completed gives Futures as they finish
                 try:
                     from dask.distributed import (
-                        as_completed,  # Local import to avoid hard dep when not used
                         Future,  # Import Future for type hinting
+                        as_completed,  # Local import to avoid hard dep when not used
                     )
                 except ImportError:  # pragma: no cover
                     raise RuntimeError("dask.distributed is required for run_dask")

@@ -54,6 +54,9 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install pytest numpy tqdm dask[distributed]
         # We don't install Psi4 in CI, so tests will use mocks
+    - name: Install saptase in editable mode
+      run: |
+        python -m pip install --editable .
     - name: Test with pytest (excluding slow)
       run: |
         pytest -v -m "not slow"

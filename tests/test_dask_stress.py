@@ -5,28 +5,23 @@ Marked *slow* so it only runs in nightly CI when RUN_STRESS=true.
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import subprocess
 import sys
 import time
-import gc  # Added for garbage collection
-import asyncio # Added for sleep
-from dask.distributed.utils import sync # Added for Dask sync
 from pathlib import Path
 from typing import List
-import logging
-import weakref
 
 import numpy as np
 import pytest
-from dask.distributed import Client, LocalCluster
 from saptase.core.backend import SaptBackend
 from saptase.core.models import Molecule, SaptResult, SaptTask
-from saptase.core.orchestrator import SaptWorkflow
-from saptase.core.orchestrator import DaskExecutor
+from saptase.core.orchestrator import DaskExecutor, SaptWorkflow
 
 logger = logging.getLogger(__name__)
+
 
 class TrivialBackend(SaptBackend):
     """Backend that *always* succeeds instantly (no external deps)."""
