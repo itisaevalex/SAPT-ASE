@@ -12,7 +12,6 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 # Import the correct exception path
 # REMOVED: from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
-
 from saptase.core.scratch import TaskScratch
 
 from .errors import (
@@ -29,10 +28,10 @@ logger = logging.getLogger(__name__)
 
 # Global placeholder for the (optional) Psi4 module and its specific exceptions/types.
 psi4: Optional[ModuleType] = None
-qcdbBasisSetNotFound = None  # Placeholder # noqa: F811
-qcdbSCFConvergenceError = None  # Placeholder # noqa: F811
-qcdbWavefunctionAlgorithmError = None  # Placeholder # noqa: F811
-qcdbMolecule = None  # Placeholder # noqa: F811
+qcdbBasisSetNotFound = None  # Placeholder
+qcdbSCFConvergenceError = None  # Placeholder
+qcdbWavefunctionAlgorithmError = None  # Placeholder
+qcdbMolecule = None  # Placeholder
 
 PSI4_AVAILABLE = False
 PSI4_IMPORT_ERROR = None
@@ -45,10 +44,12 @@ if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
 
         qcdb_exceptions_mod = import_module("psi4.driver.qcdb.exceptions")
         globals()["qcdbBasisSetNotFound"] = getattr(qcdb_exceptions_mod, "BasisSetNotFound")
-        
+
         # Source SCFConvergenceError and WavefunctionAlgorithmError from the main psi4_module
         globals()["qcdbSCFConvergenceError"] = getattr(psi4_module, "SCFConvergenceError")
-        globals()["qcdbWavefunctionAlgorithmError"] = getattr(psi4_module, "WavefunctionAlgorithmError")
+        globals()["qcdbWavefunctionAlgorithmError"] = getattr(
+            psi4_module, "WavefunctionAlgorithmError"
+        )
 
         qcdb_molecule_mod = import_module("psi4.driver.qcdb.molecule")
         globals()["qcdbMolecule"] = getattr(qcdb_molecule_mod, "Molecule")
