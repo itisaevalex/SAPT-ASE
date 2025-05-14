@@ -168,9 +168,10 @@ def _execute_task_for_parallel(
     # and it's closed reliably at the end.
     # Note: Local import is fine here as it's outside the hot loop.
     from .logdb import LogDb
+
     logdb = LogDb(db_path)
 
-    try: # Outer try for LogDb cleanup
+    try:  # Outer try for LogDb cleanup
         while True:
             # No need for string-to-Enum conversion as TaskStatus is now guaranteed to be an Enum
 
@@ -205,7 +206,9 @@ def _execute_task_for_parallel(
                         # Use 0-based attempt numbering to be consistent with the recovery ladder
                         task_result.attempt_number = context.attempt_index
                         task_result.elapsed_time = elapsed_time
-                        task_result.basis_set = task.basis_set  # Ensure these are set from task state
+                        task_result.basis_set = (
+                            task.basis_set
+                        )  # Ensure these are set from task state
                         task_result.method = task.method
 
                         # Log this successful attempt to the database and close connection
@@ -244,7 +247,9 @@ def _execute_task_for_parallel(
                     method=task.method,
                     attempt_number=context.attempt_index,  # 0-indexed current attempt for this task.id
                     elapsed_time=elapsed_time,
-                    error_details=json.dumps(context.history) # Capture error history for this attempt
+                    error_details=json.dumps(
+                        context.history
+                    ),  # Capture error history for this attempt
                 )
                 # Ensure logdb is available and log this failed attempt
                 # Note: logdb is initialized within the TaskScratch context manager's scope
@@ -288,7 +293,8 @@ def _execute_task_for_parallel(
                     error_message=f"Task failed permanently after {context.attempt_index + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
                     basis_set=task.basis_set,  # basis/method from the last failed attempt state
                     method=task.method,
-                    attempt_number=context.attempt_index + 1, # This is the total attempts for the original task
+                    attempt_number=context.attempt_index
+                    + 1,  # This is the total attempts for the original task
                     error_code=final_error_code,
                     error_details=json.dumps(context.history),
                 )
@@ -311,7 +317,9 @@ def _execute_task_for_parallel(
                     method=task.method,
                     attempt_number=context.attempt_index + 1,
                     error_code=type(base_exc).__name__,
-                    error_details=json.dumps([*context.history, {"error": f"Unexpected: {base_exc}"}]),
+                    error_details=json.dumps(
+                        [*context.history, {"error": f"Unexpected: {base_exc}"}]
+                    ),
                 )
                 result.elapsed_time = elapsed_time
                 # Ensure logdb is available and log this unexpected failure
@@ -319,8 +327,8 @@ def _execute_task_for_parallel(
                 # logdb.close() # DO NOT CLOSE HERE - close at function end
                 break  # Exit loop on unexpected error
     finally:
-        if logdb and logdb.conn: # Ensure logdb was initialized and has a connection
-            logdb.close() # Reliably close LogDb connection when worker function exits
+        if logdb and logdb.conn:  # Ensure logdb was initialized and has a connection
+            logdb.close()  # Reliably close LogDb connection when worker function exits
 
     # --- Final Logging (outside loop, within worker) ---
     # Ensure result is defined before logging
