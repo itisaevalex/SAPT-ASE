@@ -29,6 +29,36 @@ from .models import SaptResult, SaptTask, TaskStatus
 # real library lazily via ``Psi4Backend._has_psi4``.
 psi4: Optional[ModuleType] = None
 
+# Conditionally import Psi4-related modules and set a flag
+PSI4_AVAILABLE = False
+PSI4_IMPORT_ERROR = None
+if not os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+    try:
+        # Psi4-specific imports
+        from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
+        from psi4.driver.qcdb.exceptions import SCFConvergenceError as qcdbSCFConvergenceError
+        from psi4.driver.qcdb.exceptions import (
+            WavefunctionAlgorithmError as qcdbWavefunctionAlgorithmError,
+        )
+        from psi4.driver.qcdb.molecule import Molecule as qcdbMolecule  # Psi4 molecule
+        from psi4.driver.wrapper_base importதியில்basis # type: ignore
+        # ^ Fix for pylint disable=no-name-in-module; input-sanitization issue
+        # TODO: File upstream issue if this is not just a type-hint bug
+
+        import psi4  # Import the main psi4 package
+
+        PSI4_AVAILABLE = True
+    except ImportError as e:
+        PSI4_IMPORT_ERROR = e
+        # This allows the module to load, but Psi4Backend will handle unavailability.
+        # Logger call might be too early if logger isn't configured yet.
+        # print(f"DEBUG: Psi4 not available due to ImportError: {e}") # For debugging
+        pass
+    except Exception as e: # Catch other potential psi4 import errors
+        PSI4_IMPORT_ERROR = e
+        # print(f"DEBUG: Psi4 not available due to an unexpected error during import: {e}") # For debugging
+        pass
+
 # --- Setup Logger --- #
 logger = logging.getLogger(__name__)
 
@@ -249,6 +279,18 @@ class Psi4Backend(SaptBackend):
             scratch_root: Base directory for scratch files. Defaults to env var or OS tmp.
             keep_scratch: Whether to keep scratch files after calculation.
         """
+        if not PSI4_AVAILABLE:
+            # This error is for direct instantiation when Psi4 is not usable.
+            # get_default_backend() should prevent this in CI_FAST mode for workflows.
+            error_msg = "Psi4Backend initialized, but Psi4 is not available"
+            if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+                error_msg += " (CI_FAST is active)."
+            elif PSI4_IMPORT_ERROR:
+                error_msg += f" due to import error: {PSI4_IMPORT_ERROR}"
+            else:
+                error_msg += "."
+            raise ImportError(error_msg)
+
         self.memory = memory
         self.scratch_root = scratch_root  # Store for later use
         self.keep_scratch = keep_scratch  # Store for later use
