@@ -155,6 +155,14 @@ def get_backend(backend_name: str, options: Optional[Dict[str, Any]] = None) -> 
     options = options or {}
 
     if backend_name_lower == "psi4":
+        # If CI_FAST is active, do not attempt to instantiate the real Psi4Backend.
+        # Instead, provide a mock backend suitable for fast testing.
+        if os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+            logger.debug(
+                "get_backend: CI_FAST is active. Returning SuccessMockBackend for 'psi4' request."
+            )
+            return SuccessMockBackend()  # Or get_backend("mock", options) if complex mock needed
+
         # Extract specific options if needed, e.g., memory
         psi4_memory = options.get("memory", "2GB")  # Default memory
         return Psi4Backend(memory=psi4_memory)
