@@ -42,6 +42,22 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Addressed `ValueError: Internal bug: illegal Psi4 options {'scratch_root', 'keep_scratch'}` by adding a filter in `saptase.core.backend._calculate_inner` to explicitly remove these keys from `psi4_options` before passing them to `psi4.set_options()`. This serves as a hot-fix pending cleanup of YAML loading logic.
 - Corrected XYZ file parsing bug in `saptase.core.models.Molecule.from_xyz_string` (related to off-by-one error in line counting - fix implemented separately by user).
 
+### Enhanced Psi4 Integration and CI Robustness (Recent Sweeping Changes)
+- **Improved Mocking & Optional Psi4:**
+    - Introduced `saptase.core._psi4_compat.py` to centralize Psi4 imports, handle version differences, and provide fallbacks, ensuring `saptase` can run even with a partial or missing Psi4 installation.
+    - `saptase.core.backend.py` now imports all Psi4 components via `_psi4_compat.py`.
+    - Enhanced `tests/conftest.py` to provide more comprehensive mock `psi4` and `psi4.core` modules, including mock exceptions and a mock `Molecule` class, for `_psi4_compat.py` to consume during mock tests.
+    - Fixed `TypeError` when using mocked Psi4 exceptions (e.g., `psi4.ValidationError`) in `except` clauses by implementing a `_safe_exc` helper in `backend.py` to ensure only valid exception types are used.
+- **CI Stability and Accuracy:**
+    - Resolved `ModuleNotFoundError: No module named 'psi4'` in mock tests by ensuring the `_psi4_compat.py` layer gracefully handles missing Psi4 components.
+    - Fixed Windows-specific CI test failures (`ValueError: psi4.__spec__ is None`) by adding `__spec__` attributes to the mock `psi4` and `psi4.core` modules in `tests/conftest.py`. This ensures compatibility with `importlib.util.find_spec` during test discovery and execution on Windows.
+    - Corrected Psi4 molecule creation in `saptase.core.backend.py` from `qcdbMolecule(xyz_str)` to the correct `psi4.geometry(xyz_str)` API, resolving `TypeError: psi4.core.Molecule: No constructor defined!` in real Psi4 tests.
+    - Addressed failing SCF recovery tests in `tests/test_backend.py` by aligning the exception types raised by mocks with those expected by the backend (via `_psi4_compat.SCFConvergenceError`).
+    - Fixed various Ruff linting errors (`RUF001`, `E731`, `F821`) across the codebase.
+- **Test Suite Improvements:**
+    - Added `@pytest.mark.psi4` to `test_real_psi4_water_dimer` in `tests/test_end2end.py` to ensure it only runs in the "real" Psi4 CI lane.
+    - Removed special handling for `BasisIncompatible` in `saptase.core.orchestrator.py` to allow the `EscalationContext` to manage retries properly.
+
 ### Removed
 - Removed previous logic for downloading/unzipping dimer files in `pauling-sweep.yml`.
 
