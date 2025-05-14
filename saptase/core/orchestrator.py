@@ -227,13 +227,18 @@ def _execute_task_for_parallel(
                 time.monotonic() - current_attempt_start_time
             )  # Time for this failed attempt
 
-            # ** Immediate failure for BasisIncompatible errors **
-            if isinstance(err, BasisIncompatible):
-                worker_logger.error(f"Task {task.id} failed due to incompatible/missing basis. No retries will be attempted.")
-                final_err = err
-                final_error_code = type(err).__name__
-                # Skip directly to permanent failure logic
-            elif context.can_retry(err):
+            # ** REMOVED: Immediate failure for BasisIncompatible errors **
+            # This was preventing EscalationContext from handling basis recovery.
+            # Let all SaptErrors fall through to the context.can_retry / context.apply logic.
+            # if isinstance(err, BasisIncompatible):
+            #     worker_logger.error(
+            #         f"Task {task.id} failed due to incompatible/missing basis. No retries will be attempted."
+            #     )
+            #     final_err = err
+            #     final_error_code = type(err).__name__
+            #     # Skip directly to permanent failure logic
+            # el
+            if context.can_retry(err):
                 try:
                     retry_task = context.apply(
                         err

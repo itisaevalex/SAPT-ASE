@@ -170,6 +170,7 @@ def test_run_sapt_convenience(water_dimer):
 
 # Only run this test if Psi4 is available
 @requires_psi4
+@pytest.mark.psi4  # Ensure this test is selected only by the "psi4" marker
 def test_real_psi4_water_dimer(water_dimer):
     """Test running a real SAPT calculation with Psi4."""
     monomer_a, monomer_b = water_dimer

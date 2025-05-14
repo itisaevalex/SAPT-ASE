@@ -20,6 +20,7 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
+
 # Import the correct exception path
 from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
 
@@ -423,9 +424,11 @@ class Psi4Backend(SaptBackend):
                         error_str = str(e).lower()
                         # Use the correct exception type from psi4.driver.qcdb.exceptions
                         basis_exception_type = qcdbBasisSetNotFound
-                        is_basis_error = isinstance(e, BasisIncompatible) or \
-                                         (basis_exception_type and isinstance(e, basis_exception_type)) or \
-                                         re.search(r"basis set|basisset|could not find basis", error_str)
+                        is_basis_error = (
+                            isinstance(e, BasisIncompatible)
+                            or (basis_exception_type and isinstance(e, basis_exception_type))
+                            or re.search(r"basis set|basisset|could not find basis", error_str)
+                        )
 
                         if is_basis_error:
                             logger.error(f"Basis set error encountered: {e}")
