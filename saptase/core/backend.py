@@ -24,44 +24,47 @@ from .errors import (
 )
 from .models import SaptResult, SaptTask, TaskStatus
 
-# Global placeholder for the (optional) Psi4 module.
-# Tests that need to stub Psi4 patch this symbol, and production code acquires the
-# real library lazily via ``Psi4Backend._has_psi4``.
-psi4: Optional[ModuleType] = None
+# --- Setup Logger --- #
+logger = logging.getLogger(__name__)
 
-# Conditionally import Psi4-related modules and set a flag
+# Global placeholder for the (optional) Psi4 module and its specific exceptions/types.
+psi4: Optional[ModuleType] = None
+qcdbBasisSetNotFound = None  # Placeholder # noqa: F811
+qcdbSCFConvergenceError = None  # Placeholder
+qcdbWavefunctionAlgorithmError = None  # Placeholder
+qcdbMolecule = None  # Placeholder
+
 PSI4_AVAILABLE = False
 PSI4_IMPORT_ERROR = None
 if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
     try:
-        # Psi4-specific imports
-        # REMOVED: from psi4.driver.wrapper_base importதியில்basis # type: ignore (Invalid syntax)
-        # ^ Fix for pylint disable=no-name-in-module; input-sanitization issue
-        # TODO: File upstream issue if this is not just a type-hint bug
-        import psi4  # Import the main psi4 package
-        from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
+        # Try to import Psi4 and its components
+        # Assign to module-level globals upon successful import.
+        psi4_module = import_module("psi4")
+        globals()["psi4"] = psi4_module  # Make psi4 module global
 
-        # from psi4.driver.qcdb.exceptions import SCFConvergenceError as qcdbSCFConvergenceError # F401 unused
-        # from psi4.driver.qcdb.exceptions import ( # F401 unused
-        #     WavefunctionAlgorithmError as qcdbWavefunctionAlgorithmError,
-        # )
-        # from psi4.driver.qcdb.molecule import Molecule as qcdbMolecule  # F401 unused # Psi4 molecule
+        qcdb_exceptions = import_module("psi4.driver.qcdb.exceptions")
+        globals()["qcdbBasisSetNotFound"] = getattr(qcdb_exceptions, "BasisSetNotFound")
+        globals()["qcdbSCFConvergenceError"] = getattr(qcdb_exceptions, "SCFConvergenceError")
+        globals()["qcdbWavefunctionAlgorithmError"] = getattr(
+            qcdb_exceptions, "WavefunctionAlgorithmError"
+        )
+
+        qcdb_molecule_mod = import_module("psi4.driver.qcdb.molecule")
+        globals()["qcdbMolecule"] = getattr(qcdb_molecule_mod, "Molecule")
 
         PSI4_AVAILABLE = True
     except ImportError as e:
         PSI4_IMPORT_ERROR = e
-        # This allows the module to load, but Psi4Backend will handle unavailability.
-        # Logger call might be too early if logger isn't configured yet.
-        # print(f"DEBUG: Psi4 not available due to ImportError: {e}") # For debugging
-        pass
-    except Exception as e:  # Catch other potential psi4 import errors
+        logger.info(
+            f"Psi4 modules not fully available due to ImportError: {e}. This is expected if Psi4 is not installed."
+        )
+    except Exception as e:
         PSI4_IMPORT_ERROR = e
-        # print(f"DEBUG: Psi4 not available due to an unexpected error during import: {e}") # For debugging
-        pass
-
-# --- Setup Logger --- #
-logger = logging.getLogger(__name__)
-
+        logger.warning(
+            f"Psi4 modules not fully available due to an unexpected error during import: {e}",
+            exc_info=False,
+        )
 
 # --- Helper for Conditional Psi4 Import ---
 # Removed
@@ -460,13 +463,13 @@ class Psi4Backend(SaptBackend):
                         scf_success = True
                         logger.info(f"SCF converged successfully on attempt {attempt + 1}.")
                         break
-                    except psi4.SCFConvergenceError as e:
+                    except qcdbSCFConvergenceError as e:
                         logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
                         last_scf_error = e
                         continue
                     except (
                         psi4.ValidationError,
-                        qcdbBasisSetNotFound,
+                        qcdbBasisSetNotFound if qcdbBasisSetNotFound else SaptError,
                         BasisIncompatible,
                     ) as e:
                         error_str = str(e).lower()
