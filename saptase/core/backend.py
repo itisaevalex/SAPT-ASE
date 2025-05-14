@@ -45,10 +45,12 @@ if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
         qcdb_exceptions_mod = import_module("psi4.driver.qcdb.exceptions")
         globals()["qcdbBasisSetNotFound"] = getattr(qcdb_exceptions_mod, "BasisSetNotFound")
 
-        # Source SCFConvergenceError and WavefunctionAlgorithmError from the main psi4_module
+        # Source SCFConvergenceError from the main psi4_module
         globals()["qcdbSCFConvergenceError"] = getattr(psi4_module, "SCFConvergenceError")
+
+        # Source WavefunctionAlgorithmError from qcdb_exceptions_mod
         globals()["qcdbWavefunctionAlgorithmError"] = getattr(
-            psi4_module, "WavefunctionAlgorithmError"
+            qcdb_exceptions_mod, "WavefunctionAlgorithmError"
         )
 
         qcdb_molecule_mod = import_module("psi4.driver.qcdb.molecule")
