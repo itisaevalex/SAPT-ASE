@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false # Don't cancel all jobs if one fails
       matrix:
-        python-version: ['3.10', '3.11']
+        python-version: ['3.10', '3.11'] # Note: environment-ci.yml constrains Python, this mainly serves as matrix key
         os: [ubuntu-latest, windows-latest]
         psi4-mode: ["mock", "real"]
         # Exclude Windows + Real Psi4 for now (no windows binary)
@@ -45,7 +45,7 @@ jobs:
             psi4-mode: real
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3 # Consider updating to v4 if available/compatible
       with:
         fetch-depth: 0
 
@@ -55,51 +55,54 @@ jobs:
         echo "SAPTASE_SCRATCH_ROOT=$RUNNER_TEMP/saptase" >> "$GITHUB_ENV"
 
     # ----------------------------------------------------------------------
-    # Setup for MOCK Psi4 mode (pip install)
+    # Setup for MOCK Psi4 mode (micromamba install for consistent env)
     # ----------------------------------------------------------------------
-    - name: Set up Python (Mock Mode)
+    - name: Set up micromamba (Mock Mode)
       if: matrix.psi4-mode == 'mock'
-      uses: actions/setup-python@v4
+      uses: mamba-org/setup-micromamba@v1
       with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies (Mock Mode)
-      if: matrix.psi4-mode == 'mock'
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install pytest numpy tqdm dask[distributed]
-        # No Psi4 needed here
+        cache-downloads: true
+        environment-file: environment-ci.yml # Ensures all deps, incl. psi4, are available via saptase-ci
+        # python-version from matrix is implicitly handled by environment-ci.yml's constraints
 
     - name: Install saptase in editable mode (Mock Mode)
       if: matrix.psi4-mode == 'mock'
+      shell: bash -l {0} # Micromamba requires login shell for env activation
       run: |
+        # saptase-ci environment should be active from setup-micromamba
+        echo "Installing saptase (mock mode)..."
         python -m pip install --editable .
 
     - name: Test with pytest (Mock Mode)
       if: matrix.psi4-mode == 'mock'
+      shell: bash -l {0} # Micromamba requires login shell for env activation
       env:
-        CI_FAST: 1 # Ensure tests use mocks
+        CI_FAST: 1 # Ensure tests use mocks (saptase internal logic)
       run: |
+        # saptase-ci environment should be active
+        echo "Running pytest (mock mode)..."
         pytest -v -m "not slow and not psi4"
 
     # ----------------------------------------------------------------------
     # Setup for REAL Psi4 mode (micromamba install)
     # ----------------------------------------------------------------------
-    - name: List files for debugging
+    - name: List files for debugging (Real Mode) # Renamed for clarity
       if: matrix.psi4-mode == 'real'
       run: ls -la
 
-    - name: Install Psi4 w/ micromamba (Real Mode)
+    - name: Set up micromamba (Real Mode) # Renamed for consistency
       if: matrix.psi4-mode == 'real'
       uses: mamba-org/setup-micromamba@v1
       with:
-        cache-downloads: true          # speed subsequent runs
-        environment-file: environment-ci.yml   # Use the new conda env file from repo root
+        cache-downloads: true
+        environment-file: environment-ci.yml
 
     - name: Install saptase in editable mode (Real Mode)
       if: matrix.psi4-mode == 'real'
       shell: bash -l {0} # Micromamba requires login shell
       run: |
+        # saptase-ci environment should be active
+        echo "Installing saptase (real mode)..."
         python -m pip install --editable .
 
     - name: Test with pytest (Real Mode)
@@ -109,30 +112,35 @@ jobs:
         OMP_NUM_THREADS: 1 # Limit threads for Psi4
         # CI_FAST is NOT set here, so tests run real calculations
       run: |
+        # saptase-ci environment should be active
+        echo "Running pytest (real mode)..."
         pytest -v -m "psi4" # Select tests requiring Psi4
 
     # ----------------------------------------------------------------------
-    # CLI Smoke Test (Run for both modes, but uses CI_FAST for mock)
+    # CLI Smoke Test (Run for both modes, uses CI_FAST for mock)
     # ----------------------------------------------------------------------
     - name: Run CLI Dask smoke test
       if: ${{ !cancelled() }} # Only run if previous steps succeeded
       # Continue on Windows due to potential dask port flakes (only affects mock mode now)
       continue-on-error: ${{ matrix.os == 'windows-latest' && matrix.psi4-mode == 'mock' }}
-      # Explicitly use login shell to allow micromamba activate
-      shell: bash -l {0}
+      shell: bash -l {0} # Explicitly use login shell to allow micromamba activate
       env:
         OMP_NUM_THREADS: 1
         # Conditionally set CI_FAST based on matrix
         CI_FAST: ${{ matrix.psi4-mode == 'mock' && 1 || 0 }}
       run: |
         set -e # Exit on error
+
+        echo "Activating saptase-ci environment for smoke test (mode: ${{ matrix.psi4-mode }})..."
+        micromamba activate saptase-ci # Activate for both real and mock paths
+
         if [[ "${{ matrix.psi4-mode }}" == "real" ]]; then
-          echo "Activating saptase-ci environment..."
-          micromamba activate saptase-ci
-          echo "Running smoke test in saptase-ci environment..."
+          # CI_FAST is 0 for real mode, see env block
+          echo "Running Dask smoke test (real mode) in saptase-ci environment..."
           python -m saptase.cli run examples/dask_local_demo.yml --mode dask
         else
-          echo "Running smoke test in default python environment..."
+          # CI_FAST is 1 for mock mode, see env block
+          echo "Running Dask smoke test (mock mode) in saptase-ci environment..."
           python -m saptase.cli run examples/dask_local_demo.yml --mode dask
         fi
 

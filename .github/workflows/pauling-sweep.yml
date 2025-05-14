@@ -158,4 +158,4 @@ jobs:
             # This branch previously failed due to running in the default env
             # Now it will correctly use the activated saptase-ci environment
             python -m saptase.cli run examples/dask_local_demo.yml --mode dask
-          fi 
+          fi
