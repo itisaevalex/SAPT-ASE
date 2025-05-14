@@ -15,9 +15,12 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 from saptase.core._psi4_compat import (
     PSI4_AVAILABLE,
     PSI4_IMPORT_ERROR,
-    BasisSetNotFound,  # Specific exception
-    SCFConvergenceError,  # Specific exception
+    BasisSetNotFound,  # Specific exception or None/FallbackExc
+    SCFConvergenceError,  # Specific exception or None/FallbackExc
     psi4,  # This is the psi4 module itself, or None
+)
+from saptase.core._psi4_compat import (
+    Molecule as qcdbMolecule,  # Psi4's Molecule class or None
 )
 
 # Import the correct exception path
@@ -55,6 +58,27 @@ logger = logging.getLogger(__name__)
 # --- Helper for Conditional Psi4 Import --- #
 # REMOVED: This helper is also no longer needed as logic is in _psi4_compat.py
 
+
+# ---------------------------------------------------------------------------
+# Psi4 Exception Handling Robustness (for mocks and older/partial Psi4 builds)
+# ---------------------------------------------------------------------------
+def _safe_exc(obj: Any, fallback: type) -> type:
+    """Return *obj* if it is an Exception subclass, else *fallback*."""
+    return obj if isinstance(obj, type) and issubclass(obj, BaseException) else fallback
+
+
+# Get actual Psi4 exceptions if available and they are valid exception types,
+# otherwise fall back to a generic SaptError. `psi4` can be None here.
+# These names will shadow any direct psi4.XYZ access within this module if psi4 is None or lacks the attr.
+_psi4_validation_error = getattr(
+    psi4, "ValidationError", SaptError
+)  # Default to SaptError if attr missing
+PsiValidationError = _safe_exc(_psi4_validation_error, SaptError)
+
+_psi4_core_exception = getattr(
+    psi4, "PsiException", SaptError
+)  # Default to SaptError if attr missing
+PsiCoreException = _safe_exc(_psi4_core_exception, SaptError)
 
 # --- Backend Implementations ---
 
@@ -382,23 +406,13 @@ class Psi4Backend(SaptBackend):
                 # Update task status
                 task.status = TaskStatus.RUNNING
 
-                # Initialize Psi4 (psi4 variable is guaranteed non-None here)
+                # Initialize Psi4 (psi4 variable is guaranteed non-None here by _has_psi4 check before calling _calculate_inner)
                 psi4.core.clean()
                 psi4.set_memory(self.memory)
-                # Output file goes to CWD, which IS the task_scratch_dir thanks to TaskScratch
                 psi4.core.set_output_file("psi4_output.dat", False)
 
-                # --- REMOVED psi4.core.set_local_scratch --- #
-                # The _psi4_scratch context manager handles setting scratch paths now.
-                # logger.debug(f"Set Psi4 local scratch to: {task_scratch_dir}") # No longer needed
-
-                # Create a dimer molecule with fragments
-                a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[
-                    2
-                ]  # Skip atom count and comment
-                b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[
-                    2
-                ]  # Skip atom count and comment
+                a_xyz = task.monomer_a.to_xyz_string().split("\n", 2)[2]
+                b_xyz = task.monomer_b.to_xyz_string().split("\n", 2)[2]
                 molecule_str = (
                     f"{task.monomer_a.charge} {task.monomer_a.multiplicity}\n"
                     f"{a_xyz}\n"
@@ -406,7 +420,9 @@ class Psi4Backend(SaptBackend):
                     f"{task.monomer_b.charge} {task.monomer_b.multiplicity}\n"
                     f"{b_xyz}\n"
                 )
-                psi4_mol = psi4.geometry(molecule_str)
+                if not qcdbMolecule:  # Check if Psi4's Molecule class was loaded
+                    raise SaptError("Psi4's Molecule class not available (qcdbMolecule is None).")
+                psi4_mol = qcdbMolecule(molecule_str)
 
                 # --- SCF Recovery Loop --- #
                 scf_success = False
@@ -426,17 +442,12 @@ class Psi4Backend(SaptBackend):
                         **scf_options,
                     }
 
-                    # -----------------------------------------------------------------
-                    # 🩹 hot-fix: drop options Psi4 does not understand
                     for bad in ("scratch_root", "keep_scratch", "recovery_strategy"):
-                        psi4_options.pop(bad, None)  # silently discard if present
-                    # -----------------------------------------------------------------
+                        psi4_options.pop(bad, None)
 
-                    # Safety Guard (remains correct)
                     _illegal = {"scratch_root", "keep_scratch"}
                     illegal_keys = _illegal & psi4_options.keys()
                     if illegal_keys:
-                        # This path indicates a deeper issue if reached
                         raise ValueError(
                             f"Internal bug: STILL found illegal Psi4 options {illegal_keys} after explicit removal"
                         )
@@ -444,36 +455,34 @@ class Psi4Backend(SaptBackend):
                     psi4.set_options(psi4_options)
 
                     try:
-                        # Run the SAPT calculation
                         psi4.energy(task.method, molecule=psi4_mol)
                         scf_success = True
                         logger.info(f"SCF converged successfully on attempt {attempt + 1}.")
                         break
-                    except SCFConvergenceError as e:
+                    except SCFConvergenceError if SCFConvergenceError else SaptError as e:
                         logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
                         last_scf_error = e
                         continue
                     except (
-                        psi4.ValidationError,
-                        BasisSetNotFound if BasisSetNotFound else SaptError,
+                        PsiValidationError,  # Safe alias
+                        (
+                            BasisSetNotFound if BasisSetNotFound else SaptError
+                        ),  # Use imported or fallback
                         BasisIncompatible,
                     ) as e:
                         error_str = str(e).lower()
-                        # Use the correct exception type from psi4.driver.qcdb.exceptions
-                        basis_exception_type = BasisSetNotFound
                         is_basis_error = (
                             isinstance(e, BasisIncompatible)
-                            or (basis_exception_type and isinstance(e, basis_exception_type))
+                            or (BasisSetNotFound and isinstance(e, BasisSetNotFound))
                             or re.search(r"basis set|basisset|could not find basis", error_str)
                         )
-
                         if is_basis_error:
                             logger.error(f"Basis set error encountered: {e}")
                             raise BasisIncompatible(str(e)) from e
                         else:
                             logger.error(f"Psi4 validation error (non-basis): {e}")
                             raise PsiProgramCrashed(f"Psi4 validation error: {e}") from e
-                    except (psi4.PsiException, MemoryExceeded) as e:
+                    except (PsiCoreException, MemoryExceeded) as e:  # Safe alias
                         error_str = str(e).lower()
                         if isinstance(e, MemoryExceeded) or re.search(
                             r"memoryerror|malloc|memory allocation|out of memory", error_str

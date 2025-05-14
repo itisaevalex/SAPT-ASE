@@ -57,17 +57,23 @@ def _first(symbol: str, default: object = None) -> object:
     )
 
 
+# Helper function to create dummy exception classes, replacing the lambda
+def _create_fallback_exception(name: str) -> type:
+    """Creates a new exception class with the given name."""
+    return type(name, (Exception,), {})
+
+
 if PSI4_AVAILABLE:  # Only try to define these if Psi4 itself loaded
     try:
-        _FallbackExc = lambda name: type(
-            name, (Exception,), {}
-        )  # Helper to create dummy exception classes
-
         WavefunctionAlgorithmError = _first(
-            "WavefunctionAlgorithmError", _FallbackExc("WavefunctionAlgorithmError")
+            "WavefunctionAlgorithmError", _create_fallback_exception("WavefunctionAlgorithmError")
         )
-        BasisSetNotFound = _first("BasisSetNotFound", _FallbackExc("BasisSetNotFound"))
-        SCFConvergenceError = _first("SCFConvergenceError", _FallbackExc("SCFConvergenceError"))
+        BasisSetNotFound = _first(
+            "BasisSetNotFound", _create_fallback_exception("BasisSetNotFound")
+        )
+        SCFConvergenceError = _first(
+            "SCFConvergenceError", _create_fallback_exception("SCFConvergenceError")
+        )
         Molecule = _first("Molecule", None)  # Psi4's Molecule class, fallback to None
     except (
         Exception
