@@ -422,7 +422,9 @@ class Psi4Backend(SaptBackend):
                 )
                 if not qcdbMolecule:  # Check if Psi4's Molecule class was loaded
                     raise SaptError("Psi4's Molecule class not available (qcdbMolecule is None).")
-                psi4_mol = qcdbMolecule(molecule_str)
+                if not psi4:  # Should be caught by _has_psi4 earlier, but defensive check
+                    raise SaptError("Psi4 module not available for geometry creation.")
+                psi4_mol = psi4.geometry(molecule_str)
 
                 # --- SCF Recovery Loop --- #
                 scf_success = False
