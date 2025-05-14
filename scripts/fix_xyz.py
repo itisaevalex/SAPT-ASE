@@ -1,6 +1,7 @@
 import pathlib
 import sys
 
+
 def sanitize_xyz_file(file_path: pathlib.Path):
     """
     Sanitizes an XYZ file in-place.
@@ -19,21 +20,22 @@ def sanitize_xyz_file(file_path: pathlib.Path):
         comment_line = lines[1] if len(lines) > 1 else ""
         atom_coordinate_lines = lines[2:]
 
-        content_parts = [atom_count_line.strip('\r\n')]
-        content_parts.append(comment_line.strip('\r\n'))
-        
+        content_parts = [atom_count_line.strip("\r\n")]
+        content_parts.append(comment_line.strip("\r\n"))
+
         for atom_line in atom_coordinate_lines:
-            content_parts.append(atom_line.strip('\r\n'))
-        
+            content_parts.append(atom_line.strip("\r\n"))
+
         new_content = "\n".join(content_parts)
         # Ensure a single trailing newline for the whole file
-        new_content = new_content.rstrip('\n\r') + '\n'
+        new_content = new_content.rstrip("\n\r") + "\n"
 
         file_path.write_text(new_content)
         # print(f"Sanitized: {file_path}")
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}", file=sys.stderr)
+
 
 def main():
     scripts_dir = pathlib.Path(__file__).parent
@@ -55,8 +57,9 @@ def main():
     print(f"Found {len(all_xyz_files)} XYZ files to process in {data_dir}...")
     for xyz_file in all_xyz_files:
         sanitize_xyz_file(xyz_file)
-    
+
     print(f"Finished sanitizing {len(all_xyz_files)} files.")
 
+
 if __name__ == "__main__":
-    main() 
+    main()

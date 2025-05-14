@@ -3,16 +3,16 @@
 Tests for the AdaptiveWorkflow functionality.
 """
 
-from typing import Any, Dict, Optional, TYPE_CHECKING, List, Tuple, Union
+from typing import Any, Dict, Optional
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from saptase.core.backend import SaptBackend
-from saptase.core.basis import BASIS_LADDER, get_basis_rung, get_next_basis
+from saptase.core.basis import BASIS_LADDER
 from saptase.core.models import Molecule, SaptResult, SaptTask, TaskStatus
 from saptase.core.orchestrator import run_adaptive_workflow
 from saptase.workflows.adaptive import AdaptiveWorkflow
-from unittest.mock import MagicMock, patch
 
 # Helper function to create dummy SaptResult objects for testing convergence
 INTERNAL_KEY_MAP = {
@@ -435,9 +435,9 @@ def test_check_convergence(
     # Create an AdaptiveWorkflow instance with the specified accuracy
     # Backend doesn't matter for this unit test
     # Use dummy_task which has basis_set defined
-    
+
     # Patch get_backend for the scope of this test
-    with patch('saptase.workflows.adaptive.get_backend') as mock_get_backend:
+    with patch("saptase.workflows.adaptive.get_backend") as mock_get_backend:
         mock_backend_instance = MagicMock(spec=SaptBackend)
         mock_get_backend.return_value = mock_backend_instance
 
