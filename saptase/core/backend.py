@@ -32,20 +32,20 @@ psi4: Optional[ModuleType] = None
 # Conditionally import Psi4-related modules and set a flag
 PSI4_AVAILABLE = False
 PSI4_IMPORT_ERROR = None
-if not os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
+if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
     try:
         # Psi4-specific imports
-        from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
-        from psi4.driver.qcdb.exceptions import SCFConvergenceError as qcdbSCFConvergenceError
-        from psi4.driver.qcdb.exceptions import (
-            WavefunctionAlgorithmError as qcdbWavefunctionAlgorithmError,
-        )
-        from psi4.driver.qcdb.molecule import Molecule as qcdbMolecule  # Psi4 molecule
-        from psi4.driver.wrapper_base importதியில்basis # type: ignore
+        # REMOVED: from psi4.driver.wrapper_base importதியில்basis # type: ignore (Invalid syntax)
         # ^ Fix for pylint disable=no-name-in-module; input-sanitization issue
         # TODO: File upstream issue if this is not just a type-hint bug
-
         import psi4  # Import the main psi4 package
+        from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
+
+        # from psi4.driver.qcdb.exceptions import SCFConvergenceError as qcdbSCFConvergenceError # F401 unused
+        # from psi4.driver.qcdb.exceptions import ( # F401 unused
+        #     WavefunctionAlgorithmError as qcdbWavefunctionAlgorithmError,
+        # )
+        # from psi4.driver.qcdb.molecule import Molecule as qcdbMolecule  # F401 unused # Psi4 molecule
 
         PSI4_AVAILABLE = True
     except ImportError as e:
@@ -54,7 +54,7 @@ if not os.getenv("CI_FAST", "").lower() in {"1", "true", "yes"}:
         # Logger call might be too early if logger isn't configured yet.
         # print(f"DEBUG: Psi4 not available due to ImportError: {e}") # For debugging
         pass
-    except Exception as e: # Catch other potential psi4 import errors
+    except Exception as e:  # Catch other potential psi4 import errors
         PSI4_IMPORT_ERROR = e
         # print(f"DEBUG: Psi4 not available due to an unexpected error during import: {e}") # For debugging
         pass
