@@ -1,4 +1,5 @@
 import asyncio
+import importlib.machinery  # Added for ModuleSpec
 import logging
 import sys
 import types  # Added for ModuleType
@@ -15,11 +16,19 @@ from saptase import SaptBackend, SaptResult, SaptTask, TaskStatus
 if "psi4" not in sys.modules:
     # Create a simple mock module object for 'psi4'
     mock_psi4_module = types.ModuleType("psi4")
+    # Add __spec__ to the mock module
+    mock_psi4_module.__spec__ = importlib.machinery.ModuleSpec("psi4", loader=None)
     sys.modules["psi4"] = mock_psi4_module
 
 # Ensure the mock psi4 module has a 'core' attribute, also a module
 if not hasattr(sys.modules["psi4"], "core"):
-    sys.modules["psi4"].core = types.ModuleType("psi4.core")
+    # Create a mock module for psi4.core
+    mock_psi4_core_module = types.ModuleType("psi4.core")
+    # Add __spec__ to the mock submodule
+    mock_psi4_core_module.__spec__ = importlib.machinery.ModuleSpec("psi4.core", loader=None)
+    sys.modules["psi4"].core = mock_psi4_core_module
+    # Also add to sys.modules directly for direct import psi4.core cases if any
+    sys.modules["psi4.core"] = mock_psi4_core_module
 
 # Set the mock WavefunctionAlgorithmError on psi4.core
 # This needs to be a class that can be instantiated and is an Exception subtype.
