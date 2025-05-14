@@ -48,10 +48,17 @@ if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
         # Source SCFConvergenceError from the main psi4_module
         globals()["qcdbSCFConvergenceError"] = getattr(psi4_module, "SCFConvergenceError")
 
-        # Source WavefunctionAlgorithmError from qcdb_exceptions_mod
-        globals()["qcdbWavefunctionAlgorithmError"] = getattr(
-            qcdb_exceptions_mod, "WavefunctionAlgorithmError"
-        )
+        # Attempt to source WavefunctionAlgorithmError from psi4.core
+        # This is a common location for core Psi4 C++ exceptions
+        if hasattr(psi4_module, "core"):
+            globals()["qcdbWavefunctionAlgorithmError"] = getattr(
+                psi4_module.core, "WavefunctionAlgorithmError"
+            )
+        else:
+            # Fallback or raise a more specific error if psi4.core is not found as expected
+            raise ImportError(
+                "psi4.core module not found, cannot import WavefunctionAlgorithmError"
+            )
 
         qcdb_molecule_mod = import_module("psi4.driver.qcdb.molecule")
         globals()["qcdbMolecule"] = getattr(qcdb_molecule_mod, "Molecule")
