@@ -2,22 +2,42 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-# Make sure psi4 can be imported or mock it entirely if needed
-try:
-    import psi4
+# Import the SCFConvergenceError from the compatibility layer, which the backend uses
+from saptase.core._psi4_compat import SCFConvergenceError as _Psi4CompatSCFConvergenceError
 
-    PSI4_CONVERGENCE_ERROR = psi4.SCFConvergenceError
-except ImportError:
-    # If psi4 is not installed in the test environment, create a mock exception
-    class MockPsi4SCFConvergenceError(Exception):
-        pass
-
-    PSI4_CONVERGENCE_ERROR = MockPsi4SCFConvergenceError
-    psi4 = MagicMock()
-    psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR
-
+# Add back missing imports
 from saptase.core.backend import Psi4Backend, get_backend
+from saptase.core.errors import SaptError  # Used for fallback type check
 from saptase.core.models import Molecule, SaptTask, TaskStatus
+
+# Determine the exception type to be raised by mocks in tests.
+# This should align with what saptase.core.backend expects to catch.
+if (
+    _Psi4CompatSCFConvergenceError is not None
+    and isinstance(_Psi4CompatSCFConvergenceError, type)
+    and issubclass(_Psi4CompatSCFConvergenceError, BaseException)
+    and _Psi4CompatSCFConvergenceError is not SaptError
+):  # Ensure it's a specific exception
+    PSI4_CONVERGENCE_ERROR_FOR_TESTS = _Psi4CompatSCFConvergenceError
+else:
+    # This case implies _psi4_compat might not have found the real Psi4 exception,
+    # or Psi4 is not fully available. For test robustness, create a mock error
+    # that the test can raise. The backend's behavior with fallback types
+    # from _psi4_compat would then be tested.
+    class _MockPsi4SCFConvergenceErrorForTest(
+        RuntimeError
+    ):  # Changed from Exception to RuntimeError for more specificity
+        def __init__(self, msg, iter_val, en_val, dens_val, diis_val, **kwargs):
+            super().__init__(msg)
+            self.msg = msg
+            self.iter = iter_val  # iter is a builtin, avoid shadowing
+            self.en = en_val
+            self.dens = dens_val
+            self.DIIS = diis_val
+            # Store args to match Psi4 exception structure if needed by error message formatting
+            self.args = (msg, iter_val, en_val, dens_val, diis_val)
+
+    PSI4_CONVERGENCE_ERROR_FOR_TESTS = _MockPsi4SCFConvergenceErrorForTest
 
 
 @pytest.fixture
@@ -58,9 +78,10 @@ def test_psi4_scf_recovery_success_on_second_attempt(mock_psi4, psi4_backend, sa
     """Test that calculation recovers and succeeds on the 2nd SCF attempt."""
     # --- Mock Psi4 behavior --- #
     # 1. Mock energy to fail first time, succeed second time
-    mock_psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR  # Ensure mock psi4 has the error
+    # Ensure mock_psi4 has an SCFConvergenceError attribute of the correct type for consistency
+    mock_psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR_FOR_TESTS
     mock_psi4.energy.side_effect = [
-        PSI4_CONVERGENCE_ERROR(
+        PSI4_CONVERGENCE_ERROR_FOR_TESTS(
             "SCF failed on attempt 1", 99, MagicMock(), 1e-5, 1e-5
         ),  # Fails first call
         None,  # Succeeds second call (psi4.energy returns None on success)
@@ -150,9 +171,11 @@ def test_psi4_scf_failure_all_attempts(mock_psi4, psi4_backend, sample_task):
     """Test calculation fails after exhausting all SCF recovery attempts."""
     # Mock energy to always fail
     num_attempts = len(psi4_backend.SCF_RECOVERY_LADDER)
-    mock_psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR
+    mock_psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR_FOR_TESTS
     mock_psi4.energy.side_effect = [
-        PSI4_CONVERGENCE_ERROR(f"SCF failed on attempt {i+1}", 99, MagicMock(), 1e-5, 1e-5)
+        PSI4_CONVERGENCE_ERROR_FOR_TESTS(
+            f"SCF failed on attempt {i+1}", 99, MagicMock(), 1e-5, 1e-5
+        )
         for i in range(num_attempts)
     ]
 
