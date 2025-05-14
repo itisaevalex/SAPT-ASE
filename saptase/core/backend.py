@@ -5,10 +5,20 @@ import logging
 import os  # Added for getenv
 import re
 from abc import ABC, abstractmethod
-from importlib import import_module  # Added for import_module
+from importlib import import_module  # Re-add import_module for _has_psi4
 from pathlib import Path  # Ensure Path is imported
-from types import ModuleType  # Added for type hint
+
+# from types import ModuleType # No longer needed directly here
 from typing import Any, ClassVar, Dict, List, Optional, Union
+
+# Centralized Psi4 imports and compatibility logic
+from saptase.core._psi4_compat import (
+    PSI4_AVAILABLE,
+    PSI4_IMPORT_ERROR,
+    BasisSetNotFound,  # Specific exception
+    SCFConvergenceError,  # Specific exception
+    psi4,  # This is the psi4 module itself, or None
+)
 
 # Import the correct exception path
 # REMOVED: from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
@@ -21,63 +31,29 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
-from .models import SaptResult, SaptTask, TaskStatus
+from .models import SaptResult, SaptTask, TaskStatus  # saptase.Molecule for type hints
 
 # --- Setup Logger --- #
 logger = logging.getLogger(__name__)
 
+# REMOVED: The entire old block for dynamic Psi4 import, including:
 # Global placeholder for the (optional) Psi4 module and its specific exceptions/types.
-psi4: Optional[ModuleType] = None
-qcdbBasisSetNotFound = None  # Placeholder
-qcdbSCFConvergenceError = None  # Placeholder
-qcdbWavefunctionAlgorithmError = None  # Placeholder
-qcdbMolecule = None  # Placeholder
+# psi4: Optional[ModuleType] = None
+# qcdbBasisSetNotFound = None  # Placeholder
+# qcdbSCFConvergenceError = None  # Placeholder
+# qcdbWavefunctionAlgorithmError = None  # Placeholder
+# qcdbMolecule = None  # Placeholder
+#
+# PSI4_AVAILABLE = False
+# PSI4_IMPORT_ERROR = None
+# if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
+#    try:
+#        ...
+#    except Exception as e:
+#        ...
 
-PSI4_AVAILABLE = False
-PSI4_IMPORT_ERROR = None
-if os.getenv("CI_FAST", "").lower() not in {"1", "true", "yes"}:
-    try:
-        # Try to import Psi4 and its components
-        # Assign to module-level globals upon successful import.
-        psi4_module = import_module("psi4")
-        globals()["psi4"] = psi4_module  # Make psi4 module global
-
-        qcdb_exceptions_mod = import_module("psi4.driver.qcdb.exceptions")
-        globals()["qcdbBasisSetNotFound"] = getattr(qcdb_exceptions_mod, "BasisSetNotFound")
-
-        # Source SCFConvergenceError from the main psi4_module
-        globals()["qcdbSCFConvergenceError"] = getattr(psi4_module, "SCFConvergenceError")
-
-        # Attempt to source WavefunctionAlgorithmError from psi4.core
-        # This is a common location for core Psi4 C++ exceptions
-        if hasattr(psi4_module, "core"):
-            globals()["qcdbWavefunctionAlgorithmError"] = getattr(
-                psi4_module.core, "WavefunctionAlgorithmError"
-            )
-        else:
-            # Fallback or raise a more specific error if psi4.core is not found as expected
-            raise ImportError(
-                "psi4.core module not found, cannot import WavefunctionAlgorithmError"
-            )
-
-        qcdb_molecule_mod = import_module("psi4.driver.qcdb.molecule")
-        globals()["qcdbMolecule"] = getattr(qcdb_molecule_mod, "Molecule")
-
-        PSI4_AVAILABLE = True
-    except ImportError as e:
-        PSI4_IMPORT_ERROR = e
-        logger.info(
-            f"Psi4 modules not fully available due to ImportError: {e}. This is expected if Psi4 is not installed."
-        )
-    except Exception as e:
-        PSI4_IMPORT_ERROR = e
-        logger.warning(
-            f"Psi4 modules not fully available due to an unexpected error during import: {e}",
-            exc_info=True,  # Changed to True for better debugging
-        )
-
-# --- Helper for Conditional Psi4 Import ---
-# Removed
+# --- Helper for Conditional Psi4 Import --- #
+# REMOVED: This helper is also no longer needed as logic is in _psi4_compat.py
 
 
 # --- Backend Implementations ---
@@ -473,18 +449,18 @@ class Psi4Backend(SaptBackend):
                         scf_success = True
                         logger.info(f"SCF converged successfully on attempt {attempt + 1}.")
                         break
-                    except qcdbSCFConvergenceError as e:
+                    except SCFConvergenceError as e:
                         logger.warning(f"SCF convergence failed on attempt {attempt + 1}: {e}")
                         last_scf_error = e
                         continue
                     except (
                         psi4.ValidationError,
-                        qcdbBasisSetNotFound if qcdbBasisSetNotFound else SaptError,
+                        BasisSetNotFound if BasisSetNotFound else SaptError,
                         BasisIncompatible,
                     ) as e:
                         error_str = str(e).lower()
                         # Use the correct exception type from psi4.driver.qcdb.exceptions
-                        basis_exception_type = qcdbBasisSetNotFound
+                        basis_exception_type = BasisSetNotFound
                         is_basis_error = (
                             isinstance(e, BasisIncompatible)
                             or (basis_exception_type and isinstance(e, basis_exception_type))

@@ -1,9 +1,66 @@
 import asyncio
 import logging
 import sys
+import types  # Added for ModuleType
 
 import pytest
 from saptase import SaptBackend, SaptResult, SaptTask, TaskStatus
+
+# --- Early Mocking for Psi4 components for _psi4_compat --- #
+# This ensures that when saptase.core._psi4_compat is imported (e.g., by saptase.core.backend),
+# it can find the mocked psi4.core.WavefunctionAlgorithmError if psi4 itself is not installed
+# or if we are in a testing environment that intentionally mocks psi4.
+
+# Ensure a mock psi4 module exists in sys.modules for tests that run without real Psi4
+if "psi4" not in sys.modules:
+    # Create a simple mock module object for 'psi4'
+    mock_psi4_module = types.ModuleType("psi4")
+    sys.modules["psi4"] = mock_psi4_module
+
+# Ensure the mock psi4 module has a 'core' attribute, also a module
+if not hasattr(sys.modules["psi4"], "core"):
+    sys.modules["psi4"].core = types.ModuleType("psi4.core")
+
+# Set the mock WavefunctionAlgorithmError on psi4.core
+# This needs to be a class that can be instantiated and is an Exception subtype.
+if not hasattr(sys.modules["psi4"].core, "WavefunctionAlgorithmError"):
+    MockWavefunctionAlgorithmError = type("MockWavefunctionAlgorithmError", (Exception,), {})
+    setattr(sys.modules["psi4"].core, "WavefunctionAlgorithmError", MockWavefunctionAlgorithmError)
+    # Also make it available directly on mock psi4 module for other potential access patterns
+    if not hasattr(sys.modules["psi4"], "WavefunctionAlgorithmError"):
+        setattr(sys.modules["psi4"], "WavefunctionAlgorithmError", MockWavefunctionAlgorithmError)
+
+# For other components that _psi4_compat might try to _first from psi4.core:
+if not hasattr(sys.modules["psi4"].core, "BasisSetNotFound"):
+    MockBasisSetNotFound = type("MockBasisSetNotFound", (Exception,), {})
+    setattr(sys.modules["psi4"].core, "BasisSetNotFound", MockBasisSetNotFound)
+    if not hasattr(sys.modules["psi4"], "BasisSetNotFound"):
+        setattr(sys.modules["psi4"], "BasisSetNotFound", MockBasisSetNotFound)
+
+if not hasattr(sys.modules["psi4"].core, "SCFConvergenceError"):
+    MockSCFConvergenceError = type("MockSCFConvergenceError", (Exception,), {})
+    setattr(sys.modules["psi4"].core, "SCFConvergenceError", MockSCFConvergenceError)
+    if not hasattr(sys.modules["psi4"], "SCFConvergenceError"):
+        setattr(sys.modules["psi4"], "SCFConvergenceError", MockSCFConvergenceError)
+
+if not hasattr(sys.modules["psi4"].core, "Molecule"):
+    # A simple mock class for Molecule might be enough if only type checking or basic attributes are needed.
+    # If tests require specific methods or behaviors, this mock would need to be more sophisticated.
+    class MockPsi4Molecule:
+        def __init__(self, molecule_string=None):
+            self.molecule_string = molecule_string
+
+        # Add any methods that might be called by the code during tests if necessary
+        # For example, if to_string() is called:
+        # def to_string(self):
+        #     return self.molecule_string or ""
+
+    setattr(sys.modules["psi4"].core, "Molecule", MockPsi4Molecule)
+    if not hasattr(sys.modules["psi4"], "Molecule"):
+        setattr(sys.modules["psi4"], "Molecule", MockPsi4Molecule)
+
+# --- End Early Mocking --- #
+
 
 # Switch event loop policy on Windows for Dask compatibility
 if sys.platform.startswith("win"):
