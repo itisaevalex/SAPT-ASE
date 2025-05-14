@@ -64,9 +64,9 @@ async def really_close(
 
     cluster_addr = "unknown"
     # Capture the initial cluster argument. This reference is used for weakref logic later.
-    _original_cluster_passed_in = cluster 
+    _original_cluster_passed_in = cluster
 
-    if cluster: # Use the mutable 'cluster' for direct ops, _original_cluster_passed_in for weakref
+    if cluster:  # Use the mutable 'cluster' for direct ops, _original_cluster_passed_in for weakref
         try:
             cluster_addr = cluster.scheduler_address
         except Exception:
@@ -150,13 +150,13 @@ async def really_close(
     futures = None
     # Explicitly clear the 'cluster' variable which might have been used for direct operations.
     # _original_cluster_passed_in holds the reference needed for weakref logic if it existed.
-    cluster = None 
+    cluster = None
 
     if _original_cluster_passed_in is not None:
         # Create weak reference to the cluster object that was originally passed in
         cluster_to_weakref = _original_cluster_passed_in
         cluster_ref = weakref.ref(cluster_to_weakref)
-        
+
         # Attempt to remove the strong reference held by the argument itself.
         # This helps if this function call was the last holder of the strong reference.
         del _original_cluster_passed_in
@@ -183,7 +183,7 @@ async def really_close(
                 final_instances = getattr(LocalCluster, "_instances", set())
                 # Use cluster_to_weakref here if cluster_ref() is not None, as it's the object.
                 # However, the object from cluster_ref() is the canonical way.
-                if obj_from_ref := cluster_ref(): # Get the object from the weakref
+                if obj_from_ref := cluster_ref():  # Get the object from the weakref
                     if obj_from_ref in final_instances:
                         logger.info(
                             f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!"
@@ -195,7 +195,9 @@ async def really_close(
             else:
                 logger.debug(f"Polling: Cluster {cluster_addr} weakref cleared during poll.")
         else:
-            logger.debug(f"Polling: Cluster {cluster_addr} weakref already cleared before final poll.")
+            logger.debug(
+                f"Polling: Cluster {cluster_addr} weakref already cleared before final poll."
+            )
 
         # Explicitly remove from _instances as a final safeguard
         if alive_cluster_obj := cluster_ref():  # Get object if weakref still alive
@@ -213,7 +215,9 @@ async def really_close(
         # Clean up the weakref object itself
         del cluster_ref
     else:
-        logger.debug(f"really_close: No cluster object provided (_original_cluster_passed_in was None). Skipping weakref-based cleanup for cluster.")
+        logger.debug(
+            "really_close: No cluster object provided (_original_cluster_passed_in was None). Skipping weakref-based cleanup for cluster."
+        )
 
     gc.collect()  # One last collect
     logger.debug(f"really_close: Finished cleanup sequence for cluster {cluster_addr}")
