@@ -21,7 +21,7 @@ from saptase.core.scratch import TaskScratch  # Import TaskScratch
 from saptase.recovery.escalate import EscalationContext  # Import recovery context
 
 from .backend import Psi4Backend, SaptBackend
-from .errors import SaptError, BasisIncompatible  # Import base SaptError and BasisIncompatible
+from .errors import SaptError  # Import base SaptError and BasisIncompatible
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
 
@@ -163,144 +163,164 @@ def _execute_task_for_parallel(
         time.monotonic()
     )  # Track start time for the first attempt (used if unexpected error)
 
-    while True:
-        # No need for string-to-Enum conversion as TaskStatus is now guaranteed to be an Enum
+    # Initialize LogDb ONCE for the entire worker's processing of this task
+    # This ensures all attempts (failures and successes) are logged via the same connection
+    # and it's closed reliably at the end.
+    # Note: Local import is fine here as it's outside the hot loop.
+    from .logdb import LogDb
+    logdb = LogDb(db_path)
 
-        # Log current status entering the loop
-        worker_logger.debug(f"Task {task.id}: Entering loop. Status is now {task.status}")
+    try: # Outer try for LogDb cleanup
+        while True:
+            # No need for string-to-Enum conversion as TaskStatus is now guaranteed to be an Enum
 
-        worker_logger.info(
-            f"Task {task.id}: Attempt {context.attempt_index + 1} with basis='{task.basis_set}' method='{task.method}'"
-        )
-        current_attempt_start_time = time.monotonic()  # Time this specific attempt
+            # Log current status entering the loop
+            worker_logger.debug(f"Task {task.id}: Entering loop. Status is now {task.status}")
 
-        try:
-            # --- Execute Calculation within task-specific scratch dir ---
-            keep_scratch_flag = task.additional_keywords.get("keep_scratch", False)
-            scratch_root_flag = task.additional_keywords.get("scratch_root")
-
-            with TaskScratch(
-                task.id, scratch_root=scratch_root_flag, keep_scratch=keep_scratch_flag
-            ):
-                from .logdb import LogDb  # local import to avoid heavy dep before ctx
-
-                logdb = LogDb(db_path)
-
-                task_result = backend.calculate(task)
-
-                elapsed_time = time.monotonic() - current_attempt_start_time
-
-                # --- Process Success ---
-                if task_result.success:
-                    worker_logger.info(
-                        f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}."
-                    )
-                    # Use 0-based attempt numbering to be consistent with the recovery ladder
-                    task_result.attempt_number = context.attempt_index
-                    task_result.elapsed_time = elapsed_time
-                    task_result.basis_set = task.basis_set  # Ensure these are set from task state
-                    task_result.method = task.method
-
-                    # Log this successful attempt to the database and close connection
-                    logdb.log_task_attempt(run_id=run_id, result=task_result)
-                    logdb.close()
-
-                    result = task_result  # Store final success result
-                    break  # Exit the while loop on success
-
-                # Should not happen if backend.calculate follows contract (raises SaptError on fail)
-                else:
-                    worker_logger.error(
-                        f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure."
-                    )
-                    # Synthesize an error to proceed with retry logic
-                    raise SaptError(
-                        task_result.error_message
-                        or "Backend indicated failure without specific error"
-                    )
-
-        except SaptError as err:
-            worker_logger.warning(
-                f"Task {task.id} failed on attempt {context.attempt_index + 1} with error: {err}"
+            worker_logger.info(
+                f"Task {task.id}: Attempt {context.attempt_index + 1} with basis='{task.basis_set}' method='{task.method}'"
             )
-            elapsed_time = (
-                time.monotonic() - current_attempt_start_time
-            )  # Time for this failed attempt
+            current_attempt_start_time = time.monotonic()  # Time this specific attempt
 
-            # ** REMOVED: Immediate failure for BasisIncompatible errors **
-            # This was preventing EscalationContext from handling basis recovery.
-            # Let all SaptErrors fall through to the context.can_retry / context.apply logic.
-            # if isinstance(err, BasisIncompatible):
-            #     worker_logger.error(
-            #         f"Task {task.id} failed due to incompatible/missing basis. No retries will be attempted."
-            #     )
-            #     final_err = err
-            #     final_error_code = type(err).__name__
-            #     # Skip directly to permanent failure logic
-            # el
-            if context.can_retry(err):
-                try:
-                    retry_task = context.apply(
-                        err
-                    )  # Attempt to get the next task with the current error
-                    worker_logger.info(
-                        f"Task {retry_task.id}: Applied recovery strategy for {type(err).__name__}. Retrying as task {retry_task.id}..."
-                    )
-                    task = retry_task  # Update task for the next iteration
-                    # task.status is already set to RETRYING by copy_with_retry in context.apply
-                    continue  # Go to next iteration to execute the retry_task
-                except RuntimeError as apply_err:  # Catch error if apply() fails
-                    worker_logger.error(
-                        f"Task {task.id}: Recovery attempt failed during apply(): {apply_err}. Failing permanently."
-                    )
-                    # Store info needed to create the final failure result below
-                    final_err = apply_err
-                    final_error_code = type(
-                        err
-                    ).__name__  # Use the SaptError that led to this point
-            else:
-                # If can_retry() is False, log it and prepare for final failure result
+            try:
+                # --- Execute Calculation within task-specific scratch dir ---
+                keep_scratch_flag = task.additional_keywords.get("keep_scratch", False)
+                scratch_root_flag = task.additional_keywords.get("scratch_root")
+
+                with TaskScratch(
+                    task.id, scratch_root=scratch_root_flag, keep_scratch=keep_scratch_flag
+                ):
+                    # from .logdb import LogDb  # MOVED OUTSIDE LOOP
+                    # logdb = LogDb(db_path) # MOVED OUTSIDE LOOP
+
+                    task_result = backend.calculate(task)
+
+                    elapsed_time = time.monotonic() - current_attempt_start_time
+
+                    # --- Process Success ---
+                    if task_result.success:
+                        worker_logger.info(
+                            f"Task {task.id} completed successfully on attempt {context.attempt_index + 1}."
+                        )
+                        # Use 0-based attempt numbering to be consistent with the recovery ladder
+                        task_result.attempt_number = context.attempt_index
+                        task_result.elapsed_time = elapsed_time
+                        task_result.basis_set = task.basis_set  # Ensure these are set from task state
+                        task_result.method = task.method
+
+                        # Log this successful attempt to the database and close connection
+                        logdb.log_task_attempt(run_id=run_id, result=task_result)
+                        # logdb.close() # DO NOT CLOSE HERE - close at function end
+
+                        result = task_result  # Store final success result
+                        break  # Exit the while loop on success
+
+                    # Should not happen if backend.calculate follows contract (raises SaptError on fail)
+                    else:
+                        worker_logger.error(
+                            f"Task {task.id}: Backend returned non-success result without raising SaptError. Treating as failure."
+                        )
+                        # Synthesize an error to proceed with retry logic
+                        raise SaptError(
+                            task_result.error_message
+                            or "Backend indicated failure without specific error"
+                        )
+
+            except SaptError as err:
                 worker_logger.warning(
-                    f"Task {task.id}: No further recovery possible after attempt {context.attempt_index + 1}."
+                    f"Task {task.id} failed on attempt {context.attempt_index + 1} with error: {err}"
                 )
-                final_err = err  # Use the SaptError that triggered this failure
-                final_error_code = type(err).__name__
+                elapsed_time = (
+                    time.monotonic() - current_attempt_start_time
+                )  # Time for this failed attempt
 
-            # --- If we reach here within the SaptError block, it means the task failed permanently ---
-            # Construct failure result
-            worker_logger.error(f"Task {original_task_id} failed permanently.")
-            result = SaptResult(
-                task_id=task.id,  # Use the current task ID (which is the retry ID for retry attempts)
-                success=False,
-                error_message=f"Task failed permanently after {context.attempt_index + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
-                basis_set=task.basis_set,  # basis/method from the last failed attempt state
-                method=task.method,
-                attempt_number=context.attempt_index + 1,
-                error_code=final_error_code,
-                error_details=json.dumps(context.history),
-            )
-            result.elapsed_time = elapsed_time  # Use time from the last failed attempt
-            break  # Exit the while loop as the task failed permanently
+                # Construct and log the SaptResult for this specific failed attempt
+                failed_attempt_result = SaptResult(
+                    task_id=task.id,  # Current task.id (could be original or a _retry_X)
+                    success=False,
+                    error_message=str(err),
+                    error_code=type(err).__name__,
+                    basis_set=task.basis_set,
+                    method=task.method,
+                    attempt_number=context.attempt_index,  # 0-indexed current attempt for this task.id
+                    elapsed_time=elapsed_time,
+                    error_details=json.dumps(context.history) # Capture error history for this attempt
+                )
+                # Ensure logdb is available and log this failed attempt
+                # Note: logdb is initialized within the TaskScratch context manager's scope
+                logdb.log_task_attempt(run_id=run_id, result=failed_attempt_result)
+                # DO NOT close logdb here if we might retry. It will be closed on worker exit or success.
 
-        except Exception as base_exc:  # Catch totally unexpected errors during calculation
-            worker_logger.error(
-                f"Task {task.id} encountered unexpected error during execution: {base_exc}",
-                exc_info=True,
-            )
-            elapsed_time = time.monotonic() - current_attempt_start_time
-            # Create a failure result for this unexpected error
-            result = SaptResult(
-                task_id=task.id,  # Use current task.id, not original_task_id
-                success=False,
-                error_message=f"Unexpected error during task execution: {type(base_exc).__name__}: {base_exc}",
-                basis_set=task.basis_set,
-                method=task.method,
-                attempt_number=context.attempt_index + 1,
-                error_code=type(base_exc).__name__,
-                error_details=json.dumps([*context.history, {"error": f"Unexpected: {base_exc}"}]),
-            )
-            result.elapsed_time = elapsed_time
-            break  # Exit loop on unexpected error
+                if context.can_retry(err):
+                    try:
+                        retry_task = context.apply(
+                            err
+                        )  # Attempt to get the next task with the current error
+                        worker_logger.info(
+                            f"Task {retry_task.id}: Applied recovery strategy for {type(err).__name__}. Retrying as task {retry_task.id}..."
+                        )
+                        task = retry_task  # Update task for the next iteration
+                        # task.status is already set to RETRYING by copy_with_retry in context.apply
+                        continue  # Go to next iteration to execute the retry_task
+                    except RuntimeError as apply_err:  # Catch error if apply() fails
+                        worker_logger.error(
+                            f"Task {task.id}: Recovery attempt failed during apply(): {apply_err}. Failing permanently."
+                        )
+                        # Store info needed to create the final failure result below
+                        final_err = apply_err
+                        final_error_code = type(
+                            err
+                        ).__name__  # Use the SaptError that led to this point
+                else:
+                    # If can_retry() is False, log it and prepare for final failure result
+                    worker_logger.warning(
+                        f"Task {task.id}: No further recovery possible after attempt {context.attempt_index + 1}."
+                    )
+                    final_err = err  # Use the SaptError that triggered this failure
+                    final_error_code = type(err).__name__
+
+                # --- If we reach here within the SaptError block, it means the task failed permanently ---
+                # Construct failure result
+                worker_logger.error(f"Task {original_task_id} failed permanently.")
+                result = SaptResult(
+                    task_id=task.id,  # Use the current task ID (which is the retry ID for retry attempts)
+                    success=False,
+                    error_message=f"Task failed permanently after {context.attempt_index + 1} attempts. Last error: {type(final_err).__name__}: {final_err}",
+                    basis_set=task.basis_set,  # basis/method from the last failed attempt state
+                    method=task.method,
+                    attempt_number=context.attempt_index + 1, # This is the total attempts for the original task
+                    error_code=final_error_code,
+                    error_details=json.dumps(context.history),
+                )
+                result.elapsed_time = elapsed_time  # Use time from the last failed attempt
+                # logdb.close() # DO NOT CLOSE HERE - close at function end
+                break  # Exit the while loop as the task failed permanently
+
+            except Exception as base_exc:  # Catch totally unexpected errors during calculation
+                worker_logger.error(
+                    f"Task {task.id} encountered unexpected error during execution: {base_exc}",
+                    exc_info=True,
+                )
+                elapsed_time = time.monotonic() - current_attempt_start_time
+                # Create a failure result for this unexpected error
+                result = SaptResult(
+                    task_id=task.id,  # Use current task.id, not original_task_id
+                    success=False,
+                    error_message=f"Unexpected error during task execution: {type(base_exc).__name__}: {base_exc}",
+                    basis_set=task.basis_set,
+                    method=task.method,
+                    attempt_number=context.attempt_index + 1,
+                    error_code=type(base_exc).__name__,
+                    error_details=json.dumps([*context.history, {"error": f"Unexpected: {base_exc}"}]),
+                )
+                result.elapsed_time = elapsed_time
+                # Ensure logdb is available and log this unexpected failure
+                logdb.log_task_attempt(run_id=run_id, result=result)
+                # logdb.close() # DO NOT CLOSE HERE - close at function end
+                break  # Exit loop on unexpected error
+    finally:
+        if logdb and logdb.conn: # Ensure logdb was initialized and has a connection
+            logdb.close() # Reliably close LogDb connection when worker function exits
 
     # --- Final Logging (outside loop, within worker) ---
     # Ensure result is defined before logging

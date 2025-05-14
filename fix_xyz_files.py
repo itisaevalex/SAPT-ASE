@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 
 # Path to the s22_split directory
 split_dir = r"C:\Users\Alex Isaev\Documents\Physics Thesis Automated Multi-Fidelity SAPT(DFT) Workflows\Code\data\s22_split"

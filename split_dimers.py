@@ -1,6 +1,6 @@
-import os
-import math
 import csv
+import math
+import os
 
 # Base directories
 xyz_dir = os.path.join(

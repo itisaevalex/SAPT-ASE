@@ -1,15 +1,17 @@
 """Backend implementations for SAPT calculations."""
 
+import contextlib  # Import contextlib
 import logging
 import os  # Added for getenv
 import re
 from abc import ABC, abstractmethod
 from importlib import import_module  # Added for import_module
+from pathlib import Path  # Ensure Path is imported
 from types import ModuleType  # Added for type hint
 from typing import Any, ClassVar, Dict, List, Optional, Union
-from pathlib import Path  # Ensure Path is imported
-import shutil  # Import shutil
-import contextlib  # Import contextlib
+
+# Import the correct exception path
+from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
 
 from saptase.core.scratch import TaskScratch
 
@@ -20,10 +22,6 @@ from .errors import (
     SaptError,
     ScfFailed,
 )
-
-# Import the correct exception path
-from psi4.driver.qcdb.exceptions import BasisSetNotFound as qcdbBasisSetNotFound
-
 from .models import SaptResult, SaptTask, TaskStatus
 
 # Global placeholder for the (optional) Psi4 module.

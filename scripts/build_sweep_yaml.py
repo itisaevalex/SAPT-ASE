@@ -6,7 +6,6 @@ If --basis-list omitted, uses the 12-basis list from the script.
 Expects monomer files named like '*_a.xyz' and '*_b.xyz' in the directory.
 """
 import argparse
-import itertools
 import pathlib
 import textwrap  # Import textwrap
 
@@ -120,7 +119,7 @@ def main():
         args.out.write_text(yaml_output)
         print(
             f"Generated {len(tasks)} tasks "
-            f"({num_pairs} dimers × {len(bases)} bases) to {args.out}"
+            f"({num_pairs} dimers x {len(bases)} bases) to {args.out}"
         )
     except Exception as e:
         print(f"Error writing YAML file {args.out}: {e}")
@@ -130,8 +129,9 @@ def main():
 if __name__ == "__main__":
     # Added basic import error handling for PyYAML
     try:
-        import yaml
         import textwrap  # Ensure textwrap is imported here as well
+
+        import yaml
     except ImportError:
         print("Error: PyYAML is required to run this script. Install with: pip install pyyaml")
         exit(1)
