@@ -113,3 +113,49 @@ jobs:
           sweep.yml
         retention-days: 14
         if-no-files-found: warn # Don't fail workflow if files missing 
+
+  run_mock_tests: # New job for running mock tests
+    runs-on: ubuntu-latest
+    name: Run Mock and CLI Smoke Tests
+    env:
+      SAPTASE_SCRATCH_ROOT: "${{ runner.temp }}/saptase_mock_test_scratch"
+      PYTHONUNBUFFERED: "1"
+      CI_FAST: "1" # From CI logs, might be relevant for test configuration
+      OMP_NUM_THREADS: 1 # From CI logs for Dask smoke test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up micromamba + env for mock tests
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment-ci.yml # Specifies saptase-ci env
+          init-shell: bash # Initialize micromamba for bash shells
+
+      - name: Pytest (excluding slow and psi4-dependent tests)
+        shell: bash -l {0} # Use a login shell, which respects micromamba init
+        run: |
+          echo "Ensuring saptase-ci environment is active for pytest..."
+          micromamba activate saptase-ci # Explicit activation for robustness
+          echo "Running pytest..."
+          pytest -v -m "not slow and not psi4"
+
+      - name: CLI Dask Smoke Test
+        shell: bash -l {0} # Use a login shell
+        run: |
+          set -e # Exit on error
+          # This variable can be controlled by inputs or matrix strategy in a real scenario
+          # For this example, we'll simulate the "mock" path that was failing.
+          TEST_TYPE="mock" 
+
+          echo "Ensuring saptase-ci environment is active for Dask smoke test (mode: $TEST_TYPE)..."
+          micromamba activate saptase-ci # Explicitly activate saptase-ci for all paths
+
+          if [[ "$TEST_TYPE" == "real" ]]; then
+            echo "Running Dask smoke test in saptase-ci environment (real mode)..."
+            python -m saptase.cli run examples/dask_local_demo.yml --mode dask
+          else
+            echo "Running Dask smoke test in saptase-ci environment (mock mode)..."
+            # This branch previously failed due to running in the default env
+            # Now it will correctly use the activated saptase-ci environment
+            python -m saptase.cli run examples/dask_local_demo.yml --mode dask
+          fi 
