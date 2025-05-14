@@ -7,6 +7,8 @@ Other modules MUST NOT import psi4 directly; import from here instead.
 
 from importlib import import_module
 
+# from types import ModuleType # Not strictly needed if only using for type hints in _first, which is now less complex
+
 CANDIDATE_MODULES = [
     "psi4.core",
     "psi4.driver.exceptions",  # 1.7 fallback
@@ -15,14 +17,16 @@ CANDIDATE_MODULES = [
 
 PSI4_AVAILABLE = False
 PSI4_IMPORT_ERROR = None  # populated if anything goes wrong
+psi4 = None  # Ensure psi4 is defined in all paths
 
 # Attempt to load psi4 and essential symbols
 try:
-    psi4 = import_module("psi4")
+    psi4_module_candidate = import_module("psi4")
+    psi4 = psi4_module_candidate  # Assign to global psi4 if import succeeds
     PSI4_AVAILABLE = True
 except Exception as exc:  # broad on purpose: importlib can raise a few
     PSI4_IMPORT_ERROR = exc
-    psi4 = None  # type: ignore
+    # psi4 remains None
 
 
 def _first(symbol: str, default: object = None) -> object:
@@ -30,17 +34,13 @@ def _first(symbol: str, default: object = None) -> object:
     if not psi4:  # If psi4 module itself didn't load, don't bother searching candidates
         if default is not None:
             return default
+        # If no default and psi4 didn't load, the symbol cannot be found.
         raise AttributeError(f"{symbol} could not be located because Psi4 module is not available")
 
     for mod_name in CANDIDATE_MODULES:
         try:
-            # Ensure the candidate module path is valid if it starts with 'psi4.'
-            # For example, psi4.core needs the main psi4 to be loaded.
-            if mod_name.startswith("psi4.") and not psi4:
-                continue  # Skip if main psi4 isn't loaded
-
             # Attempt to import the specific submodule if it's not the main psi4 module
-            if mod_name != "psi4":
+            if mod_name != "psi4":  # Should not happen with current CANDIDATE_MODULES
                 mod_to_search = import_module(mod_name)
             else:
                 mod_to_search = psi4  # Should already be imported
@@ -50,31 +50,41 @@ def _first(symbol: str, default: object = None) -> object:
             continue
     if default is not None:
         return default
-    raise AttributeError(f"{symbol} could not be located in any Psi4 module: {CANDIDATE_MODULES}")
+    # If the symbol is not found in any candidate and no default is provided, raise an error.
+    # This signals that a critical Psi4 component is missing even if Psi4 itself loaded.
+    raise AttributeError(
+        f"{symbol} could not be located in any candidate Psi4 module: {CANDIDATE_MODULES}"
+    )
 
 
-if PSI4_AVAILABLE:
+if PSI4_AVAILABLE:  # Only try to define these if Psi4 itself loaded
     try:
-        WavefunctionAlgorithmError = _first("WavefunctionAlgorithmError")
-        BasisSetNotFound = _first("BasisSetNotFound")
-        SCFConvergenceError = _first("SCFConvergenceError")
-        Molecule = _first("Molecule")  # This is Psi4's molecule class
-    except AttributeError as exc:
-        # Psi4 too old or mutilated → flag as unavailable
-        PSI4_AVAILABLE = False
+        _FallbackExc = lambda name: type(
+            name, (Exception,), {}
+        )  # Helper to create dummy exception classes
+
+        WavefunctionAlgorithmError = _first(
+            "WavefunctionAlgorithmError", _FallbackExc("WavefunctionAlgorithmError")
+        )
+        BasisSetNotFound = _first("BasisSetNotFound", _FallbackExc("BasisSetNotFound"))
+        SCFConvergenceError = _first("SCFConvergenceError", _FallbackExc("SCFConvergenceError"))
+        Molecule = _first("Molecule", None)  # Psi4's Molecule class, fallback to None
+    except (
+        Exception
+    ) as exc:  # ultra-defensive – should now be rare if _first handles missing symbols with defaults
+        PSI4_AVAILABLE = False  # If symbol acquisition fails critically despite defaults in _first
         PSI4_IMPORT_ERROR = exc
 
-# Fallback definitions: Ensure the public symbols are defined even when Psi4 is absent or old.
-# This allows `from ._psi4_compat import X, Y, Z` to always succeed in backend.py.
-# The backend.py will then use `if X:` checks before actually using them.
-if "WavefunctionAlgorithmError" not in globals():
-    WavefunctionAlgorithmError = None  # type: ignore
-if "BasisSetNotFound" not in globals():
-    BasisSetNotFound = None  # type: ignore
-if "SCFConvergenceError" not in globals():
-    SCFConvergenceError = None  # type: ignore
-if "Molecule" not in globals():  # This refers to Psi4's molecule
-    Molecule = None  # type: ignore
+# -------- guarantee the public symbols always exist (mock lane & fallback) --------
+# This loop ensures that if PSI4_AVAILABLE was false, or became false above,
+# these symbols still exist as None, so `from _psi4_compat import X` doesn't fail.
+for _sym in (
+    "WavefunctionAlgorithmError",
+    "BasisSetNotFound",
+    "SCFConvergenceError",
+    "Molecule",  # Psi4's Molecule
+):
+    globals().setdefault(_sym, None)
 
 
 __all__ = [

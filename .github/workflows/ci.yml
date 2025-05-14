@@ -97,6 +97,16 @@ jobs:
         cache-downloads: true
         environment-file: environment-ci.yml
 
+    - name: Install specific Psi4 for Real Mode
+      if: matrix.psi4-mode == 'real'
+      shell: bash -l {0} # Micromamba requires login shell
+      run: |
+        echo "Installing Psi4 >=1.9 for real mode tests..."
+        micromamba install -y psi4>=1.9 -c conda-forge
+        # Verify psi4 installation (optional but good for debugging)
+        micromamba list | grep psi4
+        psi4 --version
+
     - name: Install saptase in editable mode (Real Mode)
       if: matrix.psi4-mode == 'real'
       shell: bash -l {0} # Micromamba requires login shell
