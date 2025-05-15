@@ -64,6 +64,14 @@ def run_adaptive_command(args: argparse.Namespace):
     """Handles the 'run-adaptive' subcommand."""
     print(f"Loading adaptive workflow config: {args.config_file}")
     try:
+        # Attempt to run basis bootstrap early
+        from saptase.hooks.basis_bootstrap import ensure_bases
+        ensure_bases()
+    except Exception as e:
+        # Log and continue if bootstrap fails, as it's an enhancement
+        logger.warning(f"Basis bootstrap failed: {e}. Proceeding without it.")
+
+    try:
         config = load_config(args.config_file)
     except FileNotFoundError:
         print(f"Error: Configuration file not found at {args.config_file}", file=sys.stderr)
@@ -175,6 +183,14 @@ def run_command(args: argparse.Namespace):
     """Handles the 'run' subcommand for standard workflows."""
     logger.info(f"Loading standard workflow config: {args.job_file}")
     try:
+        # Attempt to run basis bootstrap early
+        from saptase.hooks.basis_bootstrap import ensure_bases
+        ensure_bases()
+    except Exception as e:
+        # Log and continue if bootstrap fails, as it's an enhancement
+        logger.warning(f"Basis bootstrap failed: {e}. Proceeding without it.")
+
+    try:
         config = load_config(args.job_file)
     except FileNotFoundError:
         logger.error(f"Configuration file not found at {args.job_file}")
@@ -240,7 +256,23 @@ def run_command(args: argparse.Namespace):
     logger.debug(f"Keep scratch directories: {keep_scratch}")
 
     # --- Workflow Construction ---
-    workflow = SaptWorkflow()  # Uses default backend (Psi4)
+    # Read backend configuration from YAML, defaulting to psi4
+    backend_name = execution_config.get("backend", "psi4")
+    backend_options = execution_config.get("backend_options", {})
+
+    logger.info(f"Using backend: {backend_name} with options: {backend_options}")
+    try:
+        from .core.backend import get_backend  # Ensure get_backend is imported
+
+        selected_backend = get_backend(backend_name, options=backend_options)
+        workflow = SaptWorkflow(backend=selected_backend)
+        logger.info(f"Successfully initialized SaptWorkflow with backend: {backend_name}")
+    except Exception as e:
+        logger.error(
+            f"Failed to initialize SaptWorkflow with backend '{backend_name}': {e}. "
+            f"Falling back to default SaptWorkflow initialization."
+        )
+        workflow = SaptWorkflow()  # Fallback to default behavior
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -420,6 +452,12 @@ def main(argv: Optional[List[str]] = None):
         "--keep-scratch",
         action="store_true",
         help="Keep scratch directories after calculations (overrides config file).",
+    )
+    parser_run.add_argument(
+        "--max-workers-big-basis",
+        type=int,
+        default=None,
+        help="Limit max workers for tasks identified as using a 'big basis' (e.g., QZ or 5Z). Default: use general workers limit. (Feature requires further integration in workflow logic)",
     )
     parser_run.set_defaults(func=run_command)
 

@@ -1,0 +1,245 @@
+execution:
+  mode: local_parallel
+tasks:
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 08_benzene_dimer_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\08_benzene_dimer_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\08_benzene_dimer_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 09_benzene_hcn_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\09_benzene_hcn_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\09_benzene_hcn_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 10_benzene_water_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\10_benzene_water_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\10_benzene_water_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 11_ethene_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\11_ethene_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\11_ethene_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 12_ethene_ethyne_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\12_ethene_ethyne_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\12_ethene_ethyne_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 13_formamide_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\13_formamide_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\13_formamide_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 14_formic_acid_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\14_formic_acid_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\14_formic_acid_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 15_indole_benzene_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\15_indole_benzene_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\15_indole_benzene_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
