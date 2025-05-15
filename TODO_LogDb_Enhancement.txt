@@ -1,0 +1,30 @@
+## LogDb Enhancement TODO
+
+**Date:** 2025-05-15
+
+**Suggestion:** Expand `saptase.core.logdb.LogDb` to store full task results in a dedicated, structured way, rather than relying on the `task_log.error_details` column or only in-memory results at the end of a CLI run.
+
+**Current Situation:**
+- `LogDb` currently creates a `task_log` table which records task attempts and their status (`COMPLETED`, `FAILED`).
+- For successful tasks, the `error_details` column in `task_log` is `None`.
+- The actual energy components (`SaptResult.energies`) are not persisted to the database by the current `LogDb` implementation.
+- CLI has been enhanced to print results from in-memory objects, but this data is lost after the run if not captured.
+
+**Proposed Enhancements:**
+1.  **Create a `runs` table:** Store metadata for each workflow run (e.g., `run_id`, `timestamp`, `config_file_path`, `description/notes`).
+2.  **Create a `tasks` table (or similar):** Store the static definition of each task submitted in a run (e.g., `task_id`, `run_id`, `monomer_a_xyz`, `monomer_b_xyz`, initial `basis_set`, `method`, `additional_keywords`). This would mirror the information from the input YAML.
+3.  **Create a `results` table (or enhance `task_log`):**
+    *   This table should store the full, structured output of each *successful* (and potentially final failed) task attempt.
+    *   Key columns would include: `result_id` (PK), `task_id` (FK to `tasks` table), `run_id` (FK to `runs` table), `status` (`COMPLETED`, `FAILED`), `attempt_number`, `final_basis_set`, `final_method`.
+    *   **Crucially, add columns for individual SAPT energy components** (e.g., `elst_energy`, `exch_energy`, `ind_energy`, `disp_energy`, `total_sapt_energy_hartree`) or store the entire `energies` dictionary as a JSON string in a dedicated column (e.g., `energies_json`).
+    *   Also store `raw_output_path` (if applicable), `elapsed_time`, `completion_timestamp`.
+    *   The current `task_log` could potentially be evolved into this, but storing energies in `error_details` for successes is not ideal.
+
+**Benefits:**
+-   Persistent, queryable storage of all calculation results.
+-   Easier data analysis and post-processing without relying on parsing console logs or temporary files.
+-   Clearer separation of concerns in the database schema.
+
+**Considerations:**
+-   Schema migration strategy if existing databases need to be updated.
+-   Impact on `SaptResult` model and how it's populated/serialized. 

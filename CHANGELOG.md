@@ -12,6 +12,8 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added documentation (`docs/ci_psi4.md`) explaining the Psi4 CI setup and local replication.
 - Implemented `_psi4_scratch` context manager in `saptase.core.backend` to correctly set and restore `PSI_SCRATCH` environment variable and `psi4.core.IOManager` path, ensuring proper scratch directory handling.
 - Added ADR-0006 documenting the Pauling-point sweep implementation strategy and rationale.
+- Implemented `scripts/fix_xyz.py` to sanitize monomer XYZ files in `data/s22_split/` as per ADR-0006 D2.
+- Added detailed energy result reporting (total and components in kcal/mol and Hartrees) to the console output in `saptase/cli.py` for successfully completed tasks.
 
 ### Changed
 - Modified GitHub Actions workflow (`.github/workflows/ci.yml`):
@@ -33,6 +35,7 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     - `calculate` uses `TaskScratch` with instance scratch settings.
     - `_calculate_inner` now accepts `task_scratch_dir` and uses the `_psi4_scratch` context manager.
     - Removed incorrect `psi4.core.set_local_scratch` call.
+- Adjusted `pytest` marker for mock-mode tests from `"unit and not psi4"` to `"not psi4"` to correctly select Psi4-independent tests.
 
 ### Fixed
 - Resolved CI failures related to installing Psi4 (`ENOENT` for environment file, invalid `micromamba create` args).
@@ -41,6 +44,11 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Corrected `AttributeError: 'str' object has no attribute 'task_dir'` in `saptase.core.backend.calculate` by passing the `scratch_manager` path string directly to `_calculate_inner`.
 - Addressed `ValueError: Internal bug: illegal Psi4 options {'scratch_root', 'keep_scratch'}` by adding a filter in `saptase.core.backend._calculate_inner` to explicitly remove these keys from `psi4_options` before passing them to `psi4.set_options()`. This serves as a hot-fix pending cleanup of YAML loading logic.
 - Corrected XYZ file parsing bug in `saptase.core.models.Molecule.from_xyz_string` (related to off-by-one error in line counting - fix implemented separately by user).
+- Resolved `ImportError` in `tests/test_adaptive.py::test_check_convergence` by patching `saptase.workflows.adaptive.get_backend` to return a `MagicMock` when Psi4 is not expected.
+- Addressed DaskExecutor `really_close` error (`cannot create weak reference to 'NoneType' object`) when initialized with an external scheduler by adding a `None` check for `self._cluster`.
+- Resolved issue where `saptase` command was not using local project code due to incorrect environment or installation; ensured `pip install -e .[dev]` was run in the correct active (base) environment.
+- Corrected `ruff` linting error `E402 Module level import not at top of file` in `saptase/core/_psi4_compat.py`.
+- Removed temporary debug marker file creation from `saptase/core/_psi4_compat.py`.
 
 ### Enhanced Psi4 Integration and CI Robustness (Recent Sweeping Changes)
 - **Improved Mocking & Optional Psi4:**
