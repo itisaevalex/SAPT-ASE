@@ -21,6 +21,7 @@ from saptase.core.models import Molecule, SaptResult, SaptTask
 from saptase.core.orchestrator import DaskExecutor, SaptWorkflow
 
 logger = logging.getLogger(__name__)
+pytestmark = pytest.mark.dask
 
 
 class TrivialBackend(SaptBackend):

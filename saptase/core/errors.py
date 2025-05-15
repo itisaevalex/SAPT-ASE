@@ -45,3 +45,9 @@ class ResourceLimitExceeded(SaptError):
     """Raised when a calculation exceeds resource limits (e.g., wall time, disk)."""
 
     pass
+
+
+class ConfigError(SaptError):
+    """Raised for errors in configuration loading or validation."""
+
+    pass

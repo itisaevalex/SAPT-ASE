@@ -5,6 +5,7 @@ import os
 import sqlite3
 import subprocess
 from pathlib import Path
+import pytest
 
 # Helper to get path to CLI script
 # CLI_PATH is no longer needed for this test
@@ -14,6 +15,7 @@ EXAMPLE_YAML_PATH = Path(__file__).parent.parent / "examples" / "dask_local_demo
 
 # Remove the skipif marker to enable the test on Windows
 # @pytest.mark.skipif(sys.platform == "win32", reason="Subprocess testing differences on Windows")
+@pytest.mark.dask
 def test_cli_run_local_dask_success(tmp_path):
     """Test running the dask_local_demo via CLI 'run' command."""
     db_dir = tmp_path / "rundb"

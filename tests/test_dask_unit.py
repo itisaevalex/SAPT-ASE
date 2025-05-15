@@ -18,6 +18,7 @@ try:
 except ImportError:
     pytest.skip("dask.distributed not installed", allow_module_level=True)
 
+pytestmark = pytest.mark.dask
 
 @dataclass
 class SleepyMockBackend(SaptBackend):

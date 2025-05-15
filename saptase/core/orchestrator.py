@@ -210,6 +210,11 @@ def _execute_task_for_parallel(
                             task.basis_set
                         )  # Ensure these are set from task state
                         task_result.method = task.method
+                        task_result.actual_basis_set = task.basis_set
+                        
+                        # 🌟 NEW: capture canonical geometries
+                        task_result.monomer_a_xyz = task.monomer_a.to_xyz_string()
+                        task_result.monomer_b_xyz = task.monomer_b.to_xyz_string()
 
                         # Log this successful attempt to the database and close connection
                         logdb.log_task_attempt(run_id=run_id, result=task_result)
@@ -330,8 +335,65 @@ def _execute_task_for_parallel(
         if logdb and logdb.conn:  # Ensure logdb was initialized and has a connection
             logdb.close()  # Reliably close LogDb connection when worker function exits
 
-    # --- Final Logging (outside loop, within worker) ---
-    # Ensure result is defined before logging
+    # --- Post-execution cleanup for terminally failed tasks ---
+    # This cleanup runs if the task, after all attempts, is considered a failure.
+    if result is not None and not result.success:
+        worker_logger.info(
+            f"Task {original_task_id} (last attempt ID: {task.id}) failed permanently. "
+            "Attempting selective scratch cleanup."
+        )
+        try:
+            # Determine the scratch path of the last executed attempt.
+            # The 'task' object here is the one from the last iteration of the retry loop.
+            last_attempt_scratch_root = task.additional_keywords.get(
+                "scratch_root", EXECUTION.scratch_root
+            )
+            if (
+                last_attempt_scratch_root is None
+            ):  # Should be set by add_task or TaskScratch defaults
+                # Fallback, though unlikely if EXECUTION.scratch_root is configured
+                last_attempt_scratch_root = Path.cwd() / "saptase_scratch_fallback"
+                worker_logger.warning(
+                    f"Scratch root not found for task {task.id}, falling back to {last_attempt_scratch_root}"
+                )
+
+            # The scratch path is typically <scratch_root>/<task.id_of_the_attempt>
+            # TaskScratch itself uses task.id which might be "task_retry_N"
+            scratch_dir_to_clean = Path(last_attempt_scratch_root) / task.id
+
+            if scratch_dir_to_clean.exists() and scratch_dir_to_clean.is_dir():
+                worker_logger.info(
+                    f"Cleaning psi.* files from scratch directory: {scratch_dir_to_clean}"
+                )
+                files_deleted_count = 0
+                for f_pattern in ["psi.*"]:  # As per user snippet focus
+                    for f_path in scratch_dir_to_clean.glob(f_pattern):
+                        if f_path.is_file():
+                            try:
+                                f_path.unlink(missing_ok=True)
+                                files_deleted_count += 1
+                                worker_logger.debug(f"Deleted {f_path}")
+                            except Exception as e_unlink:
+                                worker_logger.warning(f"Could not delete file {f_path}: {e_unlink}")
+                if files_deleted_count > 0:
+                    worker_logger.info(
+                        f"Deleted {files_deleted_count} psi.* files from {scratch_dir_to_clean}."
+                    )
+
+                # Optionally, to remove the whole directory as per user's extended note:
+                # import shutil
+                # shutil.rmtree(scratch_dir_to_clean, ignore_errors=True)
+                # worker_logger.info(f"Purged entire scratch directory {scratch_dir_to_clean} for failed task {original_task_id}.")
+            else:
+                worker_logger.warning(
+                    f"Scratch directory {scratch_dir_to_clean} not found or not a directory for task {task.id}. Skipping cleanup."
+                )
+        except Exception as e_cleanup:
+            worker_logger.warning(
+                f"Error during scratch cleanup for task {task.id} (original: {original_task_id}): {e_cleanup}"
+            )
+
+    # Ensure a result is always returned
     if result is None:
         worker_logger.error(
             f"Internal error: _execute_task_for_parallel finished for task {original_task_id} without producing a result object."

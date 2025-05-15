@@ -427,4 +427,42 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
 
 - **Outcome:** All CI tests (mock and real, across Linux, macOS, and Windows) are now passing. The Psi4 integration is significantly more robust, gracefully handling environments with missing or partial Psi4 installations, and the test suite accurately reflects these different states.
 
+### May 15, 2025: ADR-0006 Pauling-Point Sweep - Initial Setup & Execution
+
+- **Objective:** Begin implementing and testing the ADR-0006 Pauling-Point Sweep strategy.
+- **Environment & Setup:**
+    - Attempted to create Conda environment `saptase-adr6` with `python=3.11` and `psi4`. Resolved terminal rendering issues and interruptions.
+    - Activated `saptase-adr6` (though later discovered work was unintentionally being done in the `base` anaconda env).
+    - Installed `saptase` in editable mode (`pip install -e .[dev]`).
+- **Initial `pytest` and Adjustments:**
+    - Ran `pytest -m "unit and not psi4"` as per initial recipe, found 0 tests selected due to undefined `unit` marker.
+    - Investigated `pyproject.toml` and test files; determined `pytest -m "not psi4"` was the correct command for Psi4-independent tests.
+    - Updated `tests/test_adaptive.py::test_check_convergence` by patching `saptase.workflows.adaptive.get_backend` to return a `MagicMock` to resolve `ImportError` when Psi4 is not expected by the test.
+    - Addressed DaskExecutor `really_close` error (`cannot create weak reference to 'NoneType' object`) by adding a `None` check for `self._cluster` in `saptase/execution/dask.py`.
+    - Confirmed `pytest -m "not psi4"` passes (54 selected, 4 skipped, 6 deselected).
+- **Step 2: Sanitise Monomer XYZ Files (ADR-0006 D2):**
+    - Implemented `scripts/fix_xyz.py` to ensure exactly one comment line and a trailing newline for `*_a.xyz` and `*_b.xyz` files in `data/s22_split/`.
+    - Successfully ran `python scripts/fix_xyz.py` (processed 44 files).
+- **Step 3: Generate Sweep Specification (ADR-0006 D3):**
+    - Identified `scripts/build_sweep_yaml.py` as the relevant script (vs. `generate_sweep_config.py` from recipe).
+    - Ran `python scripts/build_sweep_yaml.py --split-xyz-dir data/s22_split --out sweep.yml --basis-list jun-cc-pVDZ` to generate `sweep.yml`.
+- **Step 4: Execute a Small Subset (ADR-0006 D4 - using `quick_test_sweep.yml`):**
+    - Initial `saptase run sweep.yml ...` attempts failed with `DummyBackend` errors.
+    - Extensive debugging to trace Psi4 import and backend selection:
+        - Added logging to `saptase/cli.py` and `saptase/core/_psi4_compat.py`.
+        - Discovered that `CI_FAST` environment variable was inadvertently forcing `MockBackend` / `DummyBackend`.
+        - Confirmed `CI_FAST` was not set in the active terminal for subsequent runs.
+        - Further debugging revealed that `saptase` command was running from an old installation path (`.conda/envs/saptase-adr6/Scripts/saptase.exe`) instead of the local editable install due to environment confusion.
+    - **Resolution:** Clarified active environment was `base` anaconda. Ran `pip install -e .[dev]` in the `base` environment to correctly link the `saptase` command to the local project files.
+    - Successfully ran `saptase run quick_test_sweep.yml --mode local_parallel --max-workers 2`.
+- **Results & Database Investigation:**
+    - Initial attempts to fetch results using a provided Python script failed due to `sqlite3.OperationalError: no such table: runs` and later `no such table: results`.
+    - Investigation of `runs/runs.sqlite` revealed it only contained `schema_version`, `sqlite_sequence`, and `task_log` tables.
+    - Confirmed from `saptase/core/logdb.py` that it only creates/uses these tables, and `task_log.error_details` was `None` for successful tasks, meaning energies were not persisted in the DB by `LogDb`.
+    - **Solution for Results:** Modified `saptase/cli.py` to directly log detailed energies (total and components in kcal/mol and Hartrees) from the `SaptResult` objects in memory at the end of a workflow.
+    - Re-ran `quick_test_sweep.yml` and successfully viewed detailed energy results in the console.
+- **Code Cleanup:**
+    - Fixed `ruff` error `E402` in `saptase/core/_psi4_compat.py`.
+    - Removed temporary debug code.
+
 ---

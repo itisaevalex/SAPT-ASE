@@ -1,0 +1,37 @@
+execution:
+  mode: local_parallel
+  backend: psi4
+tasks:
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVDZ_quicktest
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_def2-SVPD_quicktest
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVDZ_quicktest
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1 

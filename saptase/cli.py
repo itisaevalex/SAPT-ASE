@@ -14,8 +14,10 @@ import numpy as np  # Needed for Molecule coordinates
 
 from .config import EXECUTION  # Global scratch config
 from .core.interop.yaml import load_config  # YAML loader
+from .core.logdb import LogDb  # Added import
 from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
+from .core.errors import SaptError, ConfigError
 
 logger = logging.getLogger(__name__)  # Use module-level logger
 
@@ -63,6 +65,15 @@ def _create_molecule(mol_data: dict) -> Molecule:
 def run_adaptive_command(args: argparse.Namespace):
     """Handles the 'run-adaptive' subcommand."""
     print(f"Loading adaptive workflow config: {args.config_file}")
+    try:
+        # Attempt to run basis bootstrap early
+        from saptase.hooks.basis_bootstrap import ensure_bases
+
+        ensure_bases()
+    except Exception as e:
+        # Log and continue if bootstrap fails, as it's an enhancement
+        logger.warning(f"Basis bootstrap failed: {e}. Proceeding without it.")
+
     try:
         config = load_config(args.config_file)
     except FileNotFoundError:
@@ -175,6 +186,15 @@ def run_command(args: argparse.Namespace):
     """Handles the 'run' subcommand for standard workflows."""
     logger.info(f"Loading standard workflow config: {args.job_file}")
     try:
+        # Attempt to run basis bootstrap early
+        from saptase.hooks.basis_bootstrap import ensure_bases
+
+        ensure_bases()
+    except Exception as e:
+        # Log and continue if bootstrap fails, as it's an enhancement
+        logger.warning(f"Basis bootstrap failed: {e}. Proceeding without it.")
+
+    try:
         config = load_config(args.job_file)
     except FileNotFoundError:
         logger.error(f"Configuration file not found at {args.job_file}")
@@ -240,7 +260,23 @@ def run_command(args: argparse.Namespace):
     logger.debug(f"Keep scratch directories: {keep_scratch}")
 
     # --- Workflow Construction ---
-    workflow = SaptWorkflow()  # Uses default backend (Psi4)
+    # Read backend configuration from YAML, defaulting to psi4
+    backend_name = execution_config.get("backend", "psi4")
+    backend_options = execution_config.get("backend_options", {})
+
+    logger.info(f"Using backend: {backend_name} with options: {backend_options}")
+    try:
+        from .core.backend import get_backend  # Ensure get_backend is imported
+
+        selected_backend = get_backend(backend_name, options=backend_options)
+        workflow = SaptWorkflow(backend=selected_backend)
+        logger.info(f"Successfully initialized SaptWorkflow with backend: {backend_name}")
+    except Exception as e:
+        logger.error(
+            f"Failed to initialize SaptWorkflow with backend '{backend_name}': {e}. "
+            f"Falling back to default SaptWorkflow initialization."
+        )
+        workflow = SaptWorkflow()  # Fallback to default behavior
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -315,8 +351,86 @@ def run_command(args: argparse.Namespace):
             f"Workflow finished. Tasks completed: {success_count}, Tasks failed: {fail_count}"
         )
         # Add more detailed reporting if needed
+
+        # ADDED: Detailed reporting for successful tasks
+        logger.info("--- Detailed Task Results ---")
+        for task_id, res_obj in results.items():
+            if res_obj.success and hasattr(res_obj, "energies") and res_obj.energies:
+                # Energies are typically in Hartrees from Psi4
+                e_tot_hartree = sum(res_obj.energies.values())
+
+                # Conversion factor from Hartree to kcal/mol
+                HARTREE_TO_KCAL_MOL = 627.50960803
+                e_tot_kcal_mol = e_tot_hartree * HARTREE_TO_KCAL_MOL
+
+                energies_kcal_mol_str_parts = []
+                for k, v_hartree in res_obj.energies.items():
+                    v_kcal_mol = v_hartree * HARTREE_TO_KCAL_MOL
+                    energies_kcal_mol_str_parts.append(f"{k}={v_kcal_mol:.4f}")
+                energies_kcal_mol_display = ", ".join(energies_kcal_mol_str_parts)
+
+                logger.info(f"  Task: {task_id}")
+                logger.info("    Status: COMPLETED")
+                logger.info(
+                    f"    Total SAPT Interaction Energy: {e_tot_kcal_mol:.4f} kcal/mol ({e_tot_hartree:.8f} Ha)"
+                )
+                logger.info(f"    Components (kcal/mol): {energies_kcal_mol_display}")
+                # Optionally log raw Hartree components if needed for extreme precision
+                # logger.info(f"    Components (Ha): {res_obj.energies}")
+            elif not res_obj.success:
+                logger.info(f"  Task: {task_id}")
+                logger.info("    Status: FAILED")
+                logger.info(f"    Error: {getattr(res_obj, 'error_message', 'N/A')}")
+                logger.info(f"    Error Code: {getattr(res_obj, 'error_code', 'N/A')}")
+            else:  # Successful but no energies attribute or it's empty
+                logger.info(f"  Task: {task_id}")
+                logger.info(
+                    "    Status: COMPLETED (energies attribute missing or empty in SaptResult object)"
+                )
+
     else:
         logger.warning("Workflow execution did not return results.")
+
+    print("\nStandard workflow execution finished.")
+
+
+def results_command(args: argparse.Namespace):
+    """Handles the 'results' subcommand to fetch and display run results."""
+    logger.info(f"Fetching results for run_id: {args.run_id}")
+    db = LogDb()  # Assumes default db_path='runs/runs.sqlite'
+    try:
+        run_results = db.fetch_results(args.run_id)
+        if not run_results:
+            print(f"No results found for run_id '{args.run_id}'.", file=sys.stderr)
+            print(
+                "Please ensure the run_id is correct and the run completed successfully.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f"\n--- Results for Run ID: {args.run_id} ---")
+        print(json.dumps(run_results, indent=2))
+
+    except Exception as e:
+        print(f"Error fetching or displaying results: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        db.close()  # Ensure database connection is closed
+
+
+def run_dedup(args):
+    """Handler for the 'saptase dedup' command."""
+    try:
+        db = LogDb(args.db)
+        logger.info(f"Attempting to deduplicate database: {args.db}")
+        logger.info(f"Mode: keep {'newest' if args.overwrite else 'oldest'} entries for duplicates.")
+        removed_count = db.deduplicate(overwrite=args.overwrite)
+        logger.info(f"Removed {removed_count} duplicate row(s).")
+        db.close()
+    except Exception as e:
+        logger.error(f"Error during deduplication: {e}", exc_info=True)
+        # Consider exiting with a non-zero status code for errors
+        # sys.exit(1) 
 
 
 def main(argv: Optional[List[str]] = None):
@@ -421,7 +535,44 @@ def main(argv: Optional[List[str]] = None):
         action="store_true",
         help="Keep scratch directories after calculations (overrides config file).",
     )
+    parser_run.add_argument(
+        "--max-workers-big-basis",
+        type=int,
+        default=None,
+        help="Limit max workers for tasks identified as using a 'big basis' (e.g., QZ or 5Z). Default: use general workers limit. (Feature requires further integration in workflow logic)",
+    )
     parser_run.set_defaults(func=run_command)
+
+    # --- 'results' subcommand --- (New subcommand)
+    results_parser = subparsers.add_parser(
+        "results", help="Fetch and display detailed results for a completed run_id."
+    )
+    results_parser.add_argument("run_id", help="The specific run_id to fetch results for.")
+    results_parser.set_defaults(func=results_command)
+
+    # --- 'dedup' subcommand ---
+    dedup_parser = subparsers.add_parser(
+        "dedup", 
+        help="Identify and remove duplicate results from the task_log table in a database.",
+        description=(
+            "Scans the task_log table for entries that are computationally identical "
+            "(based on monomers, basis set, and method). "
+            "By default, it keeps the oldest entry (by log_id) and removes newer duplicates. "
+            "Use --overwrite to keep the newest entry instead."
+        )
+    )
+    dedup_parser.add_argument(
+        "db", 
+        type=str, 
+        help="Path to the saptase SQLite database file (e.g., runs/runs.sqlite)."
+    )
+    dedup_parser.add_argument(
+        "--overwrite", 
+        action="store_true", 
+        help="If set, keep the newest (largest log_id) entry among duplicates and remove older ones. "
+             "Default is to keep the oldest (smallest log_id)."
+    )
+    dedup_parser.set_defaults(func=run_dedup)
 
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands
@@ -458,7 +609,24 @@ def main(argv: Optional[List[str]] = None):
         EXECUTION.keep_scratch = True
 
     # Call the function associated with the chosen subcommand
-    args.func(args)
+    if hasattr(args, "func"):
+        try:
+            args.func(args)
+        except SaptError as e:
+            logger.error(f"Error: {e}")
+            # Optionally, set a specific exit code for SaptError
+            # For example, sys.exit(1) or a custom code
+        except ConfigError as e:
+            logger.error(f"Configuration Error: {e}")
+            logger.error("Please check your YAML file and CLI arguments.")
+            # sys.exit(config_error_exit_code) 
+        # Generic catch for other unexpected errors is good practice too
+        # except Exception as e:
+        #     logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        #     # sys.exit(unexpected_error_exit_code)
+    else:
+        # This case should ideally not be reached if subcommands are required
+        parser.print_help()
 
 
 if __name__ == "__main__":

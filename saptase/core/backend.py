@@ -7,6 +7,8 @@ import re
 from abc import ABC, abstractmethod
 from importlib import import_module  # Re-add import_module for _has_psi4
 from pathlib import Path  # Ensure Path is imported
+import time
+import math
 
 # from types import ModuleType # No longer needed directly here
 from typing import Any, ClassVar, Dict, List, Optional, Union
@@ -397,8 +399,9 @@ class Psi4Backend(SaptBackend):
     # Actual heavy-lifting (split to keep outer context concise)
     # ------------------------------------------------------------------
     def _calculate_inner(self, task: SaptTask, task_scratch_dir: Union[str, Path]) -> SaptResult:
-        # Create result inside for pure function
-        result = SaptResult(task_id=task.id)
+        """Protected inner calculation logic with Psi4."""
+        result = SaptResult(task_id=task.id, success=False) # Initialize as failure
+        start_time = time.monotonic()
 
         # Use the context manager around the core Psi4 logic
         with _psi4_scratch(task_scratch_dir):
@@ -595,37 +598,33 @@ class Psi4Backend(SaptBackend):
                 # Catch SaptErrors raised within the loop (BasisIncompatible, MemoryExceeded, etc.)
                 # And ScfFailed raised after the loop
                 task.status = TaskStatus.FAILED
-                result.success = False
-                result.error_message = str(e)
-                result.error_code = type(e).__name__
-                # Log the basis/method even on failure
-                result.basis_set = task.basis_set
-                result.method = task.method
-                logger.error(f"Task {task.id} failed with {type(e).__name__}: {e}")
-                # For direct calls we *return* the failed result so tests can
-                # inspect it; orchestrator will treat the unsuccessful result as a
-                # failure and escalate accordingly.
-                return result
+                # result.success = False # No longer needed if we raise
+                # result.error_message = str(e)
+                # result.error_code = type(e).__name__
+                # result.basis_set = task.basis_set
+                # result.method = task.method
+                logger.error(f"Task {task.id} failed within _calculate_inner with {type(e).__name__}: {e}. Re-raising.")
+                raise # Re-raise the caught SaptError for the orchestrator
             except Exception as e:
                 # Catch any other unexpected errors during setup/teardown
                 task.status = TaskStatus.FAILED
-                result.success = False
-                result.error_message = f"Unexpected backend error: {e}"
-                result.error_code = type(e).__name__  # Or a generic code like 'BackendError'
-                # Log the basis/method even on failure
-                result.basis_set = task.basis_set
-                result.method = task.method
-                logger.critical(
-                    f"Task {task.id} failed with unexpected backend error: {e}", exc_info=True
-                )
-                # Wrap unexpected errors in PsiProgramCrashed or a new generic BackendError?
-                # Let's use PsiProgramCrashed for now, assuming it originates from
-                # Psi4 setup/interaction
-                error_msg = f"Unexpected backend error: {e}"
-                raise PsiProgramCrashed(error_msg) from e
+                # result.success = False
+                # result.error_message = f"Unexpected backend error: {e}"
+                # result.error_code = type(e).__name__
+                # result.basis_set = task.basis_set
+                # result.method = task.method
+                logger.error(f"Task {task.id} encountered truly unexpected error in _calculate_inner: {e}. Wrapping and re-raising.", exc_info=True)
+                # Wrap in a standard SaptError like PsiProgramCrashed if it's not already one
+                if isinstance(e, SaptError):
+                    raise
+                else:
+                    raise PsiProgramCrashed(f"Unexpected error in _calculate_inner: {e}") from e
 
         # The result (success or failure) is returned after the _psi4_scratch context exits
-        return result
+        result.elapsed_time = time.monotonic() - start_time
+        # error_code and error_message are set if an exception was caught and re-raised
+        # If we reach here without an exception (i.e. success), these remain None
+        return result # This line is only reached if no exception was raised from the try block
 
 
 class CamCaspBackend(SaptBackend):

@@ -63,8 +63,10 @@ async def really_close(
         return
 
     cluster_addr = "unknown"
-    original_cluster_ref = cluster  # Keep original reference for final check
-    if cluster:
+    # Capture the initial cluster argument. This reference is used for weakref logic later.
+    _original_cluster_passed_in = cluster
+
+    if cluster:  # Use the mutable 'cluster' for direct ops, _original_cluster_passed_in for weakref
         try:
             cluster_addr = cluster.scheduler_address
         except Exception:
@@ -127,8 +129,8 @@ async def really_close(
             )
 
     # 3. Extra: stop dashboard if it exists (belt and suspenders)
-    if original_cluster_ref:  # Use original ref here
-        http_server = getattr(original_cluster_ref, "_http_server", None)
+    if _original_cluster_passed_in:  # Use original ref here
+        http_server = getattr(_original_cluster_passed_in, "_http_server", None)
         if http_server:
             try:
                 http_server.stop()
@@ -140,65 +142,83 @@ async def really_close(
         # Clear ref to server
         http_server = None
 
-    # 4. Final GC sweep and polling using weak reference (ensures weak-ref removal)
+    # 4. Final GC sweep and polling using weak reference
     logger.debug(f"really_close: Starting final GC sweep for {cluster_addr}")
-    # Clear local strong references that might hold onto the cluster
+    # Clear local strong references that might hold onto the cluster object
     maybe_coro = None
     scheduler = None
     futures = None
-    # Keep weak reference for polling
-    cluster_ref = weakref.ref(original_cluster_ref)
-    del original_cluster_ref  # Delete the strong reference
-    cluster = None  # Clear the local variable reference used in step 2 as well
+    # Explicitly clear the 'cluster' variable which might have been used for direct operations.
+    # _original_cluster_passed_in holds the reference needed for weakref logic if it existed.
+    cluster = None
 
-    # Run GC passes
-    gc.collect()
-    await asyncio.sleep(0.01)  # Yield after first collect
-    gc.collect()
-    await asyncio.sleep(0.05)  # Short sleep after second collect
+    if _original_cluster_passed_in is not None:
+        # Create weak reference to the cluster object that was originally passed in
+        cluster_to_weakref = _original_cluster_passed_in
+        cluster_ref = weakref.ref(cluster_to_weakref)
 
-    # Poll using the weak reference
-    if cluster_ref() is not None:
-        logger.debug(
-            f"Polling: Cluster {cluster_addr} still referenced after GC sweep, starting weakref poll..."
-        )
-        deadline = time.monotonic() + timeout  # Reuse timeout for poll
-        while cluster_ref() is not None and time.monotonic() < deadline:
-            gc.collect()
-            await asyncio.sleep(0.05)
-            # Check if the weakref became None
+        # Attempt to remove the strong reference held by the argument itself.
+        # This helps if this function call was the last holder of the strong reference.
+        del _original_cluster_passed_in
+        # No need to del cluster_to_weakref here, it's just a temporary pointer for clarity.
+
+        # Run GC passes
+        gc.collect()
+        await asyncio.sleep(0.01)  # Yield after first collect
+        gc.collect()
+        await asyncio.sleep(0.05)  # Short sleep after second collect
+
+        # Poll using the weak reference
         if cluster_ref() is not None:
-            # Check _instances one last time for logging clarity
-            final_instances = getattr(LocalCluster, "_instances", set())
-            if cluster_ref() in final_instances:
-                logger.info(
-                    f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!"
-                )
+            logger.debug(
+                f"Polling: Cluster {cluster_addr} still referenced after GC sweep, starting weakref poll..."
+            )
+            deadline = time.monotonic() + timeout  # Reuse timeout for poll
+            while cluster_ref() is not None and time.monotonic() < deadline:
+                gc.collect()
+                await asyncio.sleep(0.05)
+                # Check if the weakref became None
+            if cluster_ref() is not None:
+                # Check _instances one last time for logging clarity
+                final_instances = getattr(LocalCluster, "_instances", set())
+                # Use cluster_to_weakref here if cluster_ref() is not None, as it's the object.
+                # However, the object from cluster_ref() is the canonical way.
+                if obj_from_ref := cluster_ref():  # Get the object from the weakref
+                    if obj_from_ref in final_instances:
+                        logger.info(
+                            f"Leak-guard: Cluster {cluster_addr} weakref STILL alive and in _instances after final cleanup and polling!"
+                        )
+                    else:
+                        logger.warning(
+                            f"Leak-guard: Cluster {cluster_addr} weakref still alive but NOT in _instances after polling."
+                        )
             else:
-                # This case might be rare - weakref alive but not in _instances?
-                logger.warning(
-                    f"Leak-guard: Cluster {cluster_addr} weakref still alive but NOT in _instances after polling."
-                )
+                logger.debug(f"Polling: Cluster {cluster_addr} weakref cleared during poll.")
         else:
-            logger.debug(f"Polling: Cluster {cluster_addr} weakref cleared during poll.")
+            logger.debug(
+                f"Polling: Cluster {cluster_addr} weakref already cleared before final poll."
+            )
+
+        # Explicitly remove from _instances as a final safeguard
+        if alive_cluster_obj := cluster_ref():  # Get object if weakref still alive
+            if hasattr(LocalCluster, "_instances"):
+                try:
+                    instances_set = getattr(LocalCluster, "_instances")
+                    if alive_cluster_obj in instances_set:
+                        logger.warning(
+                            f"really_close: Explicitly removing cluster {cluster_addr} from _instances after polling."
+                        )
+                        instances_set.discard(alive_cluster_obj)
+                except Exception as e:
+                    logger.error(f"Error during final explicit _instances.discard: {e}")
+
+        # Clean up the weakref object itself
+        del cluster_ref
     else:
-        logger.debug(f"Polling: Cluster {cluster_addr} weakref already cleared before final poll.")
+        logger.debug(
+            "really_close: No cluster object provided (_original_cluster_passed_in was None). Skipping weakref-based cleanup for cluster."
+        )
 
-    # Explicitly remove from _instances as a final safeguard
-    if original_cluster_ref_obj := cluster_ref():  # Get object if weakref still alive
-        if hasattr(LocalCluster, "_instances"):
-            try:
-                instances_set = getattr(LocalCluster, "_instances")
-                if original_cluster_ref_obj in instances_set:
-                    logger.warning(
-                        f"really_close: Explicitly removing cluster {cluster_addr} from _instances after polling."
-                    )
-                    instances_set.discard(original_cluster_ref_obj)
-            except Exception as e:
-                logger.error(f"Error during final explicit _instances.discard: {e}")
-
-    # Clean up the weakref itself
-    del cluster_ref
     gc.collect()  # One last collect
     logger.debug(f"really_close: Finished cleanup sequence for cluster {cluster_addr}")
 
