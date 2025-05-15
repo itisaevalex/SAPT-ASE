@@ -1,7 +1,8 @@
+import logging
 import os
+
 import basis_set_exchange as bse
 import psi4
-import logging
 
 logger = logging.getLogger(__name__)
 
