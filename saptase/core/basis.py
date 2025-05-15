@@ -16,8 +16,11 @@ DF_BASIS_MAP: Dict[str, str] = {
     "aug-cc-pvdz": "aug-cc-pvdz-jkfit",
     "cc-pvtz": "cc-pvtz-jkfit",
     "aug-cc-pvtz": "aug-cc-pvtz-jkfit",
+    "jun-cc-pvdz": "cc-pvdz-jkfit", # Explicitly map jun for clarity, though get_df_basis handles it
+    "jun-cc-pvtz": "cc-pvtz-jkfit", # Explicitly map jun for clarity
     "cc-pvqz": "cc-pvqz-jkfit",
     "aug-cc-pvqz": "aug-cc-pvqz-jkfit",
+    "jun-cc-pvqz": "cc-pvqz-jkfit",
     # General def2 mapping
     "def2-svp": "def2-universal-jkfit",
     "def2-svpd": "def2-universal-jkfit",
@@ -37,7 +40,8 @@ BASIS_LADDER: List[str] = [
     "aug-cc-pvdz",
     "jun-cc-pvtz",
     "aug-cc-pvtz",
-    # TODO: Consider adding QZ level if needed
+    "jun-cc-pvqz",
+    "aug-cc-pvqz",
 ]
 
 

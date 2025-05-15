@@ -6,11 +6,10 @@ from saptase.core.orchestrator import SaptWorkflow # LogDb is not directly used 
 
 @pytest.mark.psi4   # Use the registered 'psi4' marker
 def test_actual_basis_differs_after_escalation(tmp_path):
-    # Deliberately minimal basis that will hit the recovery ladder
-    bad_basis = "sto-3g"
-    # Assuming 'jun-cc-pvdz' is a basis set that 'sto-3g' would escalate to,
-    # or is a generally more robust basis that a very minimal one might escalate towards.
-    # The exact next rung depends on the BASIS_LADDER in saptase.recovery.strategies
+    # Deliberately use a non-existent basis to trigger basis set recovery
+    bad_basis = "sto-3g_nonexistent"
+    # Assuming 'jun-cc-pvdz' is a basis set that the recovery mechanism might escalate to.
+    # The actual escalation target will depend on saptase.recovery.strategies.BASIS_LADDER
     # For this test, we mainly care that it *changes* to something valid and successful.
     # We will assert a specific good_basis if we are sure about the ladder.
     # For now, let's assume 'jun-cc-pvdz' is a likely candidate or a known good one.

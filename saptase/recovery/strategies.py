@@ -7,43 +7,75 @@ Each strategy is a function that modifies a SaptTask to enable recovery.
 
 import copy
 import logging
+from typing import Optional
 
-from saptase.core.basis import get_previous_basis
+from saptase.core.basis import get_previous_basis, get_basis_rung, get_next_basis, BASIS_LADDER
 from saptase.core.models import SaptTask
 
 logger = logging.getLogger(__name__)
 
 
 def recover_basis_incompatible(task: SaptTask) -> SaptTask:
-    """Strategy: Switch to the previous (smaller) basis set in the ladder.
+    """Strategy: Escalate to the next basis set in the ladder.
+
+    If the current basis is not in the ladder, it defaults to the first
+    basis in the ladder. If already at the highest rung, signals failure.
 
     Args:
         task: The failed task
 
     Returns:
-        A new SaptTask with the smaller basis set
+        A new SaptTask with the escalated or default basis set, or the
+        original task if escalation is not possible.
     """
     new_task = copy.deepcopy(task)
-    try:
-        original_basis = new_task.basis_set
-        new_basis = get_previous_basis(original_basis)
+    original_basis = new_task.basis_set
+    new_basis: Optional[str] = None
 
+    current_rung = get_basis_rung(original_basis)
+
+    if current_rung is None:
+        # Basis is not in the ladder, try the first one from the ladder
+        if BASIS_LADDER:
+            new_basis = BASIS_LADDER[0]
+            logger.info(
+                f"Recovery: Task {task.id} - BasisIncompatible. "
+                f"Original basis '{original_basis}' not in ladder. "
+                f"Attempting first ladder basis '{new_basis}'."
+            )
+        else:
+            logger.warning(
+                f"Recovery failed for Task {task.id} - BasisIncompatible: "
+                f"Original basis '{original_basis}' not in ladder, and BASIS_LADDER is empty."
+            )
+            return task # Signal failure
+    else:
+        # Basis is in the ladder, try the next one
+        new_basis = get_next_basis(original_basis)
         if new_basis is None:
             logger.warning(
                 f"Recovery failed for Task {task.id} - BasisIncompatible: "
-                f"Cannot find a smaller basis than '{original_basis}'."
+                f"Cannot find a larger basis than '{original_basis}' (already at top of ladder)."
             )
-            return task  # Signal failure by returning original task unchanged
+            return task  # Signal failure
+        else:
+            logger.info(
+                f"Recovery: Task {task.id} - BasisIncompatible. "
+                f"Escalating basis from '{original_basis}' to '{new_basis}'."
+            )
 
+    if new_basis:
         new_task.basis_set = new_basis
-        new_task.additional_keywords["recovery_strategy"] = "recover_basis_incompatible"
-        logger.info(
-            f"Recovery: Task {task.id} - BasisIncompatible. "
-            f"Switched basis from '{original_basis}' to '{new_basis}'."
+        new_task.additional_keywords["recovery_strategy"] = "recover_basis_incompatible_escalate" # More descriptive
+        # Ensure previous basis is not carried over if we are setting a new one explicitly
+        new_task.additional_keywords.pop("previous_basis_set", None)
+    else:
+        # This case should ideally be caught by checks above, but as a fallback
+        logger.warning(
+            f"Recovery logic for Task {task.id} - BasisIncompatible resulted in no new_basis. Original basis '{original_basis}'."
         )
-    except ValueError as e:
-        logger.warning(f"Recovery failed for Task {task.id} - BasisIncompatible: {e}")
-        return task  # Signal failure
+        return task
+
 
     return new_task
 
