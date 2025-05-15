@@ -7,9 +7,12 @@ Each strategy is a function that modifies a SaptTask to enable recovery.
 
 import copy
 import logging
-from typing import Optional
 
-from saptase.core.basis import get_previous_basis, get_basis_rung, get_next_basis, BASIS_LADDER
+from saptase.core.basis import (
+    BASIS_LADDER,
+    get_basis_rung,
+    get_next_basis,
+)
 from saptase.core.models import SaptTask
 
 logger = logging.getLogger(__name__)
@@ -19,7 +22,8 @@ def recover_basis_incompatible(task: SaptTask) -> SaptTask:
     """Strategy: Escalate to the next basis set in the ladder.
 
     If the current basis is not in the ladder, it defaults to the first
-    basis in the ladder. If already at the highest rung, signals failure.
+    basis in the ladder (if BASIS_LADDER is not empty).
+    If already at the highest rung, signals failure.
 
     Args:
         task: The failed task
@@ -30,52 +34,58 @@ def recover_basis_incompatible(task: SaptTask) -> SaptTask:
     """
     new_task = copy.deepcopy(task)
     original_basis = new_task.basis_set
-    new_basis: Optional[str] = None
 
-    current_rung = get_basis_rung(original_basis)
+    # Attempt to get the next basis. If the original_basis is not in the ladder,
+    # this will return the first basis from the ladder due to fallback_first=True.
+    # If original_basis is the last in the ladder, this will return None.
+    new_basis = get_next_basis(original_basis, fallback_first=True)
 
-    if current_rung is None:
-        # Basis is not in the ladder, try the first one from the ladder
-        if BASIS_LADDER:
-            new_basis = BASIS_LADDER[0]
-            logger.info(
-                f"Recovery: Task {task.id} - BasisIncompatible. "
-                f"Original basis '{original_basis}' not in ladder. "
-                f"Attempting first ladder basis '{new_basis}'."
-            )
-        else:
-            logger.warning(
-                f"Recovery failed for Task {task.id} - BasisIncompatible: "
-                f"Original basis '{original_basis}' not in ladder, and BASIS_LADDER is empty."
-            )
-            return task # Signal failure
-    else:
-        # Basis is in the ladder, try the next one
-        new_basis = get_next_basis(original_basis)
-        if new_basis is None:
+    if new_basis is None:
+        # This means either:
+        # 1. original_basis was the last in the ladder.
+        # 2. original_basis was not in the ladder AND fallback_first=True returned None
+        #    (which happens if BASIS_LADDER is empty, though first_rung() would error then,
+        #    or if get_next_basis logic changes - current patch returns first_rung() if ladder not empty).
+        #    The new get_next_basis returns first_rung() if not found and fallback_first=True,
+        #    so this path is mainly for "already at top of ladder".
+
+        current_rung = get_basis_rung(original_basis)  # Check if it was in ladder
+        if current_rung is not None and current_rung == len(BASIS_LADDER) - 1:
             logger.warning(
                 f"Recovery failed for Task {task.id} - BasisIncompatible: "
                 f"Cannot find a larger basis than '{original_basis}' (already at top of ladder)."
             )
-            return task  # Signal failure
-        else:
-            logger.info(
-                f"Recovery: Task {task.id} - BasisIncompatible. "
-                f"Escalating basis from '{original_basis}' to '{new_basis}'."
+        elif not BASIS_LADDER:  # Explicitly check for empty ladder
+            logger.warning(
+                f"Recovery failed for Task {task.id} - BasisIncompatible: "
+                f"Original basis '{original_basis}'. BASIS_LADDER is empty."
             )
+        else:  # Should not happen with current get_next_basis logic if fallback_first=True
+            logger.warning(
+                f"Recovery failed for Task {task.id} - BasisIncompatible: "
+                f"No suitable next basis found for '{original_basis}' even with fallback. "
+                f"This might indicate an issue or an empty BASIS_LADDER."
+            )
+        return task  # Signal failure
 
-    if new_basis:
-        new_task.basis_set = new_basis
-        new_task.additional_keywords["recovery_strategy"] = "recover_basis_incompatible_escalate" # More descriptive
-        # Ensure previous basis is not carried over if we are setting a new one explicitly
-        new_task.additional_keywords.pop("previous_basis_set", None)
-    else:
-        # This case should ideally be caught by checks above, but as a fallback
-        logger.warning(
-            f"Recovery logic for Task {task.id} - BasisIncompatible resulted in no new_basis. Original basis '{original_basis}'."
+    # Log the recovery action
+    if (
+        original_basis == new_basis
+    ):  # This can happen if fallback_first was used and original_basis was not in ladder
+        logger.info(
+            f"Recovery: Task {task.id} - BasisIncompatible. "
+            f"Original basis '{original_basis}' not in ladder or invalid. "
+            f"Attempting first ladder basis '{new_basis}'."
         )
-        return task
+    else:
+        logger.info(
+            f"Recovery: Task {task.id} - BasisIncompatible. "
+            f"Escalating basis from '{original_basis}' to '{new_basis}'."
+        )
 
+    new_task.basis_set = new_basis
+    new_task.additional_keywords["recovery_strategy"] = "recover_basis_incompatible_escalate"
+    new_task.additional_keywords.pop("previous_basis_set", None)
 
     return new_task
 

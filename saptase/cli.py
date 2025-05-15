@@ -13,11 +13,11 @@ from typing import Dict, List, Optional
 import numpy as np  # Needed for Molecule coordinates
 
 from .config import EXECUTION  # Global scratch config
+from .core.errors import ConfigError, SaptError
 from .core.interop.yaml import load_config  # YAML loader
 from .core.logdb import LogDb  # Added import
 from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
-from .core.errors import SaptError, ConfigError
 
 logger = logging.getLogger(__name__)  # Use module-level logger
 
@@ -423,14 +423,16 @@ def run_dedup(args):
     try:
         db = LogDb(args.db)
         logger.info(f"Attempting to deduplicate database: {args.db}")
-        logger.info(f"Mode: keep {'newest' if args.overwrite else 'oldest'} entries for duplicates.")
+        logger.info(
+            f"Mode: keep {'newest' if args.overwrite else 'oldest'} entries for duplicates."
+        )
         removed_count = db.deduplicate(overwrite=args.overwrite)
         logger.info(f"Removed {removed_count} duplicate row(s).")
         db.close()
     except Exception as e:
         logger.error(f"Error during deduplication: {e}", exc_info=True)
         # Consider exiting with a non-zero status code for errors
-        # sys.exit(1) 
+        # sys.exit(1)
 
 
 def main(argv: Optional[List[str]] = None):
@@ -552,25 +554,23 @@ def main(argv: Optional[List[str]] = None):
 
     # --- 'dedup' subcommand ---
     dedup_parser = subparsers.add_parser(
-        "dedup", 
+        "dedup",
         help="Identify and remove duplicate results from the task_log table in a database.",
         description=(
             "Scans the task_log table for entries that are computationally identical "
             "(based on monomers, basis set, and method). "
             "By default, it keeps the oldest entry (by log_id) and removes newer duplicates. "
             "Use --overwrite to keep the newest entry instead."
-        )
+        ),
     )
     dedup_parser.add_argument(
-        "db", 
-        type=str, 
-        help="Path to the saptase SQLite database file (e.g., runs/runs.sqlite)."
+        "db", type=str, help="Path to the saptase SQLite database file (e.g., runs/runs.sqlite)."
     )
     dedup_parser.add_argument(
-        "--overwrite", 
-        action="store_true", 
+        "--overwrite",
+        action="store_true",
         help="If set, keep the newest (largest log_id) entry among duplicates and remove older ones. "
-             "Default is to keep the oldest (smallest log_id)."
+        "Default is to keep the oldest (smallest log_id).",
     )
     dedup_parser.set_defaults(func=run_dedup)
 
@@ -619,7 +619,7 @@ def main(argv: Optional[List[str]] = None):
         except ConfigError as e:
             logger.error(f"Configuration Error: {e}")
             logger.error("Please check your YAML file and CLI arguments.")
-            # sys.exit(config_error_exit_code) 
+            # sys.exit(config_error_exit_code)
         # Generic catch for other unexpected errors is good practice too
         # except Exception as e:
         #     logger.error(f"An unexpected error occurred: {e}", exc_info=True)

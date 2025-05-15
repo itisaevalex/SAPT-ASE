@@ -195,8 +195,8 @@ class SaptResult:
     # Fields for deduplication and detailed logging
     monomer_a_xyz: Optional[str] = None
     monomer_b_xyz: Optional[str] = None
-    timestamp_utc: Optional[str] = None # ISO 8601 format string
-    actual_basis_set: Optional[str] = None # Basis set finally used, after any escalation
+    timestamp_utc: Optional[str] = None  # ISO 8601 format string
+    actual_basis_set: Optional[str] = None  # Basis set finally used, after any escalation
 
     @property
     def total_energy(self) -> float:

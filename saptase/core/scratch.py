@@ -100,33 +100,49 @@ class TaskScratch(contextlib.AbstractContextManager):
         # if keep_scratch is False.
         if self._created_here:
             try:
-                logger.info("Attempting to remove scratch directory for task %s at %s", self.task_id, self.dir_path)
-                shutil.rmtree(self.dir_path, ignore_errors=True) # ignore_errors makes it robust
-                logger.debug("Successfully initiated removal of scratch directory %s (or it didn't exist).", self.dir_path)
+                logger.info(
+                    "Attempting to remove scratch directory for task %s at %s",
+                    self.task_id,
+                    self.dir_path,
+                )
+                shutil.rmtree(self.dir_path, ignore_errors=True)  # ignore_errors makes it robust
+                logger.debug(
+                    "Successfully initiated removal of scratch directory %s (or it didn't exist).",
+                    self.dir_path,
+                )
 
                 # Also attempt to clean empty parent "saptase" folder (non-fatal)
                 parent = self.dir_path.parent
-                if parent.exists() and not any(parent.iterdir()): # Check if parent is empty and exists
+                if parent.exists() and not any(
+                    parent.iterdir()
+                ):  # Check if parent is empty and exists
                     logger.debug("Attempting to remove empty parent scratch directory %s", parent)
                     try:
                         parent.rmdir()
-                        logger.info("Successfully removed empty parent scratch directory %s", parent)
-                    except OSError as e_rmdir_parent: # Catch specific OS error for rmdir
+                        logger.info(
+                            "Successfully removed empty parent scratch directory %s", parent
+                        )
+                    except OSError as e_rmdir_parent:  # Catch specific OS error for rmdir
                         logger.warning(
                             "Could not remove empty parent scratch directory %s: %s",
                             parent,
                             e_rmdir_parent,
                         )
-            except Exception as exc_cleanup:  # pragma: no cover – catch any other unexpected error during cleanup
+            except (
+                Exception
+            ) as exc_cleanup:  # pragma: no cover – catch any other unexpected error during cleanup
                 # This catches errors in the cleanup logic itself, not from the 'with' block body.
                 logger.error(
                     "Unexpected error during scratch directory cleanup for task %s at %s: %s",
                     self.task_id,
                     self.dir_path,
                     exc_cleanup,
-                    exc_info=True # Log traceback for unexpected cleanup errors
+                    exc_info=True,  # Log traceback for unexpected cleanup errors
                 )
         else:
-            logger.debug("Not the creator of scratch directory %s, leaving cleanup to outer context.", self.dir_path)
+            logger.debug(
+                "Not the creator of scratch directory %s, leaving cleanup to outer context.",
+                self.dir_path,
+            )
 
         return False  # never suppress exceptions from the 'with' block body
