@@ -17,7 +17,7 @@ from .core.interop.yaml import load_config  # YAML loader
 from .core.logdb import LogDb  # Added import
 from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
-from .core.exceptions import SapSaptaseError, ConfigError
+from .core.errors import SaptError, ConfigError
 
 logger = logging.getLogger(__name__)  # Use module-level logger
 
@@ -612,11 +612,11 @@ def main(argv: Optional[List[str]] = None):
     if hasattr(args, "func"):
         try:
             args.func(args)
-        except SapSaptaseError as e:
+        except SaptError as e:
             logger.error(f"Error: {e}")
-            # Optionally, set a specific exit code for SapSaptaseError
+            # Optionally, set a specific exit code for SaptError
             # For example, sys.exit(1) or a custom code
-        except ConfigError as e: # Specifically catch ConfigError for more targeted messages
+        except ConfigError as e:
             logger.error(f"Configuration Error: {e}")
             logger.error("Please check your YAML file and CLI arguments.")
             # sys.exit(config_error_exit_code) 
