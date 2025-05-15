@@ -7,7 +7,7 @@ import sqlite3
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from .models import SaptResult
 
@@ -29,7 +29,7 @@ class TaskStatus(Enum):
 class LogDb:
     """Provides an interface to the SQLite provenance database."""
 
-    def __init__(self, db_path: Path = Path("runs/runs.sqlite")):
+    def __init__(self, db_path: Union[str, Path], wal_mode: bool = True):
         """Initialize and connect to the database.
 
         Handles potential database corruption by renaming the corrupt file
@@ -37,8 +37,10 @@ class LogDb:
 
         Args:
             db_path: Path to the SQLite database file.
+            wal_mode: Whether to enable Write-Ahead Logging (WAL) mode.
         """
-        self.db_path = db_path
+        self.db_path = Path(db_path)  # Ensure db_path is a Path object
+        self.wal_mode = wal_mode
         self.conn: Optional[sqlite3.Connection] = None
         self.cursor: Optional[sqlite3.Cursor] = None
 
@@ -368,6 +370,7 @@ class LogDb:
 
         Duplicates are identified by a canonical key comprising:
         monomer_a_xyz, monomer_b_xyz, basis_set, method.
+        Corresponding entries in the 'results' table are also removed.
 
         Args:
             overwrite: If False (default), keeps the OLDEST (smallest log_id) entry
@@ -376,13 +379,13 @@ class LogDb:
                        duplicates and removes older ones.
 
         Returns:
-            The number of rows removed.
+            The number of rows removed from task_log.
         """
         if not self.conn or not self.cursor:
             logger.error("Database not connected, cannot perform deduplication.")
             return 0
 
-        total_rows_removed = 0
+        total_rows_removed_from_task_log = 0
         try:
             # Define the canonical key fields
             key_fields = ["monomer_a_xyz", "monomer_b_xyz", "basis_set", "method"]
@@ -397,25 +400,23 @@ class LogDb:
             """)
             duplicate_groups = self.cursor.fetchall()
 
+            if not duplicate_groups:
+                logger.info(f"No duplicate groups found to process. Overwrite={overwrite}.")
+                return 0
+
             for group_key_values in duplicate_groups:
-                # The actual key values are all but the last element (count)
                 key_values = group_key_values[:-1]
                 
-                # Build the WHERE clause for this specific group
                 where_clauses = []
                 for i, field_name in enumerate(key_fields):
-                    # Handle NULL values correctly in SQL
                     if key_values[i] is None:
                         where_clauses.append(f"{field_name} IS NULL")
                     else:
                         where_clauses.append(f"{field_name} = ?")
                 where_clause_str = " AND ".join(where_clauses)
-                
-                # Parameters for the WHERE clause (excluding NULLs, as they are handled by 'IS NULL')
                 params_for_where = tuple(kv for kv in key_values if kv is not None)
 
-                # Determine which log_id to keep
-                order_by_log_id = "ASC" if not overwrite else "DESC" # ASC for min log_id (oldest), DESC for max log_id (newest)
+                order_by_log_id = "ASC" if not overwrite else "DESC"
                 self.cursor.execute(f"""
                     SELECT log_id FROM task_log
                     WHERE {where_clause_str}
@@ -429,35 +430,58 @@ class LogDb:
                     continue
                 log_id_to_keep = row_to_keep[0]
 
-                # Delete other rows in this group
-                # Add log_id_to_keep to the parameters for the DELETE statement
-                params_for_delete = params_for_where + (log_id_to_keep,)
+                # Fetch run_id and task_id of rows to be deleted from task_log
+                # These are needed to delete corresponding entries from the 'results' table
+                params_for_select_deleted = params_for_where + (log_id_to_keep,)
+                self.cursor.execute(f"""
+                    SELECT run_id, task_id FROM task_log
+                    WHERE {where_clause_str} AND log_id != ?
+                """, params_for_select_deleted)
                 
-                delete_query = f"""
+                results_to_delete = self.cursor.fetchall()
+                
+                deleted_from_results_count = 0
+                for run_id_del, task_id_del in results_to_delete:
+                    self.cursor.execute("""
+                        DELETE FROM results
+                        WHERE run_id = ? AND task_id = ?
+                    """, (run_id_del, task_id_del))
+                    if self.cursor.rowcount > 0:
+                        logger.debug(f"Deleted from results: run_id={run_id_del}, task_id={task_id_del}")
+                        deleted_from_results_count += self.cursor.rowcount
+                
+                if deleted_from_results_count > 0:
+                    logger.info(f"Removed {deleted_from_results_count} row(s) from 'results' table for duplicate group {key_values}.")
+
+                # Delete duplicate rows from task_log
+                params_for_delete_task_log = params_for_where + (log_id_to_keep,)
+                delete_task_log_query = f"""
                     DELETE FROM task_log
                     WHERE {where_clause_str} AND log_id != ?
                 """
-                self.cursor.execute(delete_query, params_for_delete)
-                rows_removed_for_group = self.cursor.rowcount
-                total_rows_removed += rows_removed_for_group
-                logger.debug(f"Deduplicated group {key_values}: kept log_id {log_id_to_keep}, removed {rows_removed_for_group} rows.")
+                self.cursor.execute(delete_task_log_query, params_for_delete_task_log)
+                rows_removed_for_group_task_log = self.cursor.rowcount
+                total_rows_removed_from_task_log += rows_removed_for_group_task_log
+                logger.debug(f"Deduplicated group {key_values} in task_log: kept log_id {log_id_to_keep}, removed {rows_removed_for_group_task_log} rows.")
 
-            if total_rows_removed > 0:
-                self.conn.commit() # Commit changes if any rows were deleted
-                logger.info(f"Successfully removed {total_rows_removed} duplicate rows. Overwrite={overwrite}.")
+            if total_rows_removed_from_task_log > 0:
+                self.conn.commit() 
+                logger.info(f"Successfully removed {total_rows_removed_from_task_log} duplicate rows from task_log. Overwrite={overwrite}.")
             else:
-                logger.info(f"No duplicate rows found to remove. Overwrite={overwrite}.")
+                # This case might be hit if duplicate_groups was populated but no rows ended up being deleted
+                # (e.g., if row_to_keep was None for all groups, though unlikely)
+                logger.info(f"No duplicate rows were removed from task_log. Overwrite={overwrite}.")
 
         except sqlite3.Error as e:
             logger.error(f"Error during deduplication: {e}", exc_info=True)
-            if self.conn: # Rollback in case of error during transaction
+            if self.conn: 
                 try:
                     self.conn.rollback()
                 except sqlite3.Error as rb_err:
                     logger.error(f"Rollback failed: {rb_err}")
-            return 0 # Or re-raise, depending on desired error handling
+            return 0 
         
-        return total_rows_removed
+        return total_rows_removed_from_task_log
 
     def close(self):
         """Commit changes and close the database connection."""

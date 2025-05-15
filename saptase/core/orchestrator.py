@@ -211,6 +211,10 @@ def _execute_task_for_parallel(
                         )  # Ensure these are set from task state
                         task_result.method = task.method
                         task_result.actual_basis_set = task.basis_set
+                        
+                        # 🌟 NEW: capture canonical geometries
+                        task_result.monomer_a_xyz = task.monomer_a.to_xyz_string()
+                        task_result.monomer_b_xyz = task.monomer_b.to_xyz_string()
 
                         # Log this successful attempt to the database and close connection
                         logdb.log_task_attempt(run_id=run_id, result=task_result)
