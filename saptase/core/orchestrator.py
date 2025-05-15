@@ -340,20 +340,28 @@ def _execute_task_for_parallel(
         try:
             # Determine the scratch path of the last executed attempt.
             # The 'task' object here is the one from the last iteration of the retry loop.
-            last_attempt_scratch_root = task.additional_keywords.get("scratch_root", EXECUTION.scratch_root)
-            if last_attempt_scratch_root is None: # Should be set by add_task or TaskScratch defaults
+            last_attempt_scratch_root = task.additional_keywords.get(
+                "scratch_root", EXECUTION.scratch_root
+            )
+            if (
+                last_attempt_scratch_root is None
+            ):  # Should be set by add_task or TaskScratch defaults
                 # Fallback, though unlikely if EXECUTION.scratch_root is configured
-                last_attempt_scratch_root = Path.cwd() / "saptase_scratch_fallback" 
-                worker_logger.warning(f"Scratch root not found for task {task.id}, falling back to {last_attempt_scratch_root}")
+                last_attempt_scratch_root = Path.cwd() / "saptase_scratch_fallback"
+                worker_logger.warning(
+                    f"Scratch root not found for task {task.id}, falling back to {last_attempt_scratch_root}"
+                )
 
             # The scratch path is typically <scratch_root>/<task.id_of_the_attempt>
             # TaskScratch itself uses task.id which might be "task_retry_N"
             scratch_dir_to_clean = Path(last_attempt_scratch_root) / task.id
 
             if scratch_dir_to_clean.exists() and scratch_dir_to_clean.is_dir():
-                worker_logger.info(f"Cleaning psi.* files from scratch directory: {scratch_dir_to_clean}")
+                worker_logger.info(
+                    f"Cleaning psi.* files from scratch directory: {scratch_dir_to_clean}"
+                )
                 files_deleted_count = 0
-                for f_pattern in ["psi.*"]: # As per user snippet focus
+                for f_pattern in ["psi.*"]:  # As per user snippet focus
                     for f_path in scratch_dir_to_clean.glob(f_pattern):
                         if f_path.is_file():
                             try:
@@ -363,8 +371,10 @@ def _execute_task_for_parallel(
                             except Exception as e_unlink:
                                 worker_logger.warning(f"Could not delete file {f_path}: {e_unlink}")
                 if files_deleted_count > 0:
-                    worker_logger.info(f"Deleted {files_deleted_count} psi.* files from {scratch_dir_to_clean}.")
-                
+                    worker_logger.info(
+                        f"Deleted {files_deleted_count} psi.* files from {scratch_dir_to_clean}."
+                    )
+
                 # Optionally, to remove the whole directory as per user's extended note:
                 # import shutil
                 # shutil.rmtree(scratch_dir_to_clean, ignore_errors=True)

@@ -66,6 +66,7 @@ def run_adaptive_command(args: argparse.Namespace):
     try:
         # Attempt to run basis bootstrap early
         from saptase.hooks.basis_bootstrap import ensure_bases
+
         ensure_bases()
     except Exception as e:
         # Log and continue if bootstrap fails, as it's an enhancement
@@ -185,6 +186,7 @@ def run_command(args: argparse.Namespace):
     try:
         # Attempt to run basis bootstrap early
         from saptase.hooks.basis_bootstrap import ensure_bases
+
         ensure_bases()
     except Exception as e:
         # Log and continue if bootstrap fails, as it's an enhancement
