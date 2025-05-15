@@ -32,7 +32,9 @@ def test_get_basis_rung(basis_name, expected_rung):
         ("jun-cc-pvdz", "aug-cc-pvdz"),
         ("AUG-CC-PVDZ", "jun-cc-pvtz"),  # Case-insensitive check
         ("jun-cc-pvtz", "aug-cc-pvtz"),
-        ("aug-cc-pvtz", None),  # Already at the top
+        ("aug-cc-pvtz", "jun-cc-pvqz"),
+        ("jun-cc-pvqz", "aug-cc-pvqz"),
+        ("aug-cc-pvqz", None),
         ("non-existent-basis", None),  # Basis not found
         (BASIS_LADDER[0], BASIS_LADDER[1]),  # Test with direct value from list
     ],
@@ -45,7 +47,7 @@ def test_get_next_basis(current_basis, expected_next):
 @pytest.mark.parametrize(
     "orbital_basis, expected_df",
     [
-        ("jun-cc-pvdz", "jun-cc-pvdz-jkfit"),
+        ("jun-cc-pvdz", "cc-pvdz-jkfit"),
         ("aug-cc-pvdz", "aug-cc-pvdz-jkfit"),
         ("cc-pVTZ", "cc-pvtz-jkfit"),  # Default mapping uses lowercase
         ("def2-svp", "def2-universal-jkfit"),  # Explicit map entry

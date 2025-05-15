@@ -20,6 +20,7 @@ except ImportError:
 
 pytestmark = pytest.mark.dask
 
+
 @dataclass
 class SleepyMockBackend(SaptBackend):
     """Mock backend that sleeps briefly and always succeeds."""

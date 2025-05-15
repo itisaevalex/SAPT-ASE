@@ -170,7 +170,9 @@ def test_psi4_scf_success_first_attempt(mock_psi4, psi4_backend, sample_task):
 def test_psi4_scf_failure_all_attempts(mock_psi4, psi4_backend, sample_task):
     """Test calculation fails after exhausting all SCF recovery attempts."""
     # Mock energy to always fail
-    num_attempts = len(psi4_backend.SCF_RECOVERY_LADDER)
+    num_attempts = len(
+        psi4_backend.SCF_RECOVERY_LADDER
+    )  # This is typically 4 (initial + 3 retries)
     mock_psi4.SCFConvergenceError = PSI4_CONVERGENCE_ERROR_FOR_TESTS
     mock_psi4.energy.side_effect = [
         PSI4_CONVERGENCE_ERROR_FOR_TESTS(
@@ -179,15 +181,26 @@ def test_psi4_scf_failure_all_attempts(mock_psi4, psi4_backend, sample_task):
         for i in range(num_attempts)
     ]
 
-    result = psi4_backend.calculate(sample_task)
+    # Expect ScfFailed to be raised
+    with pytest.raises(
+        SaptError
+    ) as excinfo:  # Use SaptError if ScfFailed inherits from it, or ScfFailed directly
+        psi4_backend.calculate(sample_task)
 
-    assert result.success is False
-    assert sample_task.status == TaskStatus.FAILED
+    # Assertions on the raised exception
+    assert isinstance(excinfo.value, SaptError)  # More specific: ScfFailed
+    assert (
+        sample_task.status == TaskStatus.FAILED
+    )  # Status should be set on the task by the backend
     assert mock_psi4.energy.call_count == num_attempts
     assert mock_psi4.set_options.call_count == num_attempts
-    assert "SCF failed to converge after" in result.error_message
+    assert f"SCF failed to converge after {num_attempts} attempts" in str(excinfo.value)
     # Check that the string representation of the actual caught Psi4 exception is included
+    # The error message from the mock is "SCF failed on attempt N"
+    # The backend formats the final caught psi4 error message.
+    # The last error raised by the mock would be for attempt `num_attempts`.
+    # The actual string representation of the mock exception seems to be more detailed.
     assert (
-        "Last error: Could not converge SCF failed on attempt 4 in 99 iterations."
-        in result.error_message
+        f"Last error: Could not converge SCF failed on attempt {num_attempts} in 99 iterations."
+        in str(excinfo.value)
     )

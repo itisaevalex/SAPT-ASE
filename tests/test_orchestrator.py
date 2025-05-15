@@ -181,27 +181,28 @@ def log_db(tmp_path):
 
 def test_orchestrator_recover_basis_incompatible(sample_task, log_db):
     """
-    Test recovery from BasisIncompatible by switching to the next smaller basis.
-    Simulates failure on jun-cc-pvtz and success on jun-cc-pvdz.
+    Test recovery from BasisIncompatible by escalating to the next larger basis.
+    Simulates failure on jun-cc-pvdz and success on aug-cc-pvdz.
     """
-    initial_basis = "jun-cc-pvtz"  # Match case in BASIS_LADDER
-    # Find the actual previous basis from the BASIS_SETS dictionary
-    basis_levels = BASIS_LADDER  # Use the list directly
-    try:
-        initial_index = basis_levels.index(initial_basis)
-        if initial_index == 0:
-            pytest.fail("Initial basis is already the smallest, cannot test recovery.")
-        recovered_basis = basis_levels[initial_index - 1]
-        logger.info(f"Testing basis recovery: {initial_basis} -> {recovered_basis}")
-    except ValueError:
-        pytest.fail(f"Initial basis '{initial_basis}' not found in BASIS_SETS.")
+    # Initial basis is the first in the ladder, to test escalation.
+    initial_basis = BASIS_LADDER[0]  # e.g., "jun-cc-pvdz"
+    sample_task.basis_set = initial_basis
 
-    # Configure backend to fail on initial basis, succeed on recovered basis
-    backend = MockFailureBackend(fail_on_basis=initial_basis, success_on_basis=recovered_basis)
+    # Determine the expected escalated basis
+    # The recovery strategy recover_basis_incompatible will use get_next_basis.
+    escalated_basis = None
+    if len(BASIS_LADDER) > 1:
+        escalated_basis = BASIS_LADDER[1]  # e.g., "aug-cc-pvdz"
+    else:
+        pytest.fail("BASIS_LADDER needs at least two rungs to test escalation.")
+
+    logger.info(f"Testing basis recovery (escalation): {initial_basis} -> {escalated_basis}")
+
+    # Configure backend to fail on initial basis, succeed on escalated basis
+    backend = MockFailureBackend(fail_on_basis=initial_basis, success_on_basis=escalated_basis)
 
     # Setup workflow
     workflow = SaptWorkflow(backend=backend, db_path=log_db)
-    sample_task.basis_set = initial_basis  # Ensure task starts with the failing basis
     workflow.add_task(sample_task)
 
     # Run workflow
@@ -221,15 +222,15 @@ def test_orchestrator_recover_basis_incompatible(sample_task, log_db):
         final_result.task_id == f"{sample_task.id}_retry_1"
     ), "Final result ID should match the retry task ID."
     assert (
-        final_result.attempt_number == 1
+        final_result.attempt_number
+        == 1  # First retry (0-indexed in backend, but context makes it 1st retry)
     ), "Final successful attempt should be attempt 1 (the first retry)."
     assert (
-        final_result.basis_set == recovered_basis
-    ), f"Successful result should have basis {recovered_basis}, got {final_result.basis_set}"
+        final_result.basis_set == escalated_basis
+    ), f"Successful result should have basis {escalated_basis}, got {final_result.basis_set}"
     assert final_result.method == sample_task.method  # Method shouldn't change in this test
 
     # 2. Check task status in workflow object
-    # Find the task object within the workflow's task list
     task_in_workflow = next((t for t in workflow.tasks if t.id == sample_task.id), None)
     assert task_in_workflow is not None
     assert task_in_workflow.status == TaskStatus.COMPLETED
@@ -277,7 +278,7 @@ def test_orchestrator_recover_basis_incompatible(sample_task, log_db):
     # Check successful retry attempt log
     assert retry_log["task_id"] == f"{sample_task.id}_retry_1"
     assert retry_log["status"] == TaskStatus.COMPLETED.name  # Status should be COMPLETED
-    assert retry_log["basis_set"] == recovered_basis  # Check recovered basis set
+    assert retry_log["basis_set"] == escalated_basis  # Check recovered basis set
     assert retry_log["error_code"] is None  # No error on successful run
 
 

@@ -65,10 +65,11 @@ def test_escalation_context_apply_basis_incompatible(sample_task):
     assert context.attempt_count == 1
     assert context.last_error == error
     assert modified_task.id == "test_task_01_retry_1"
-    # Expect basis to step down from aug-cc-pvdz to jun-cc-pvdz
-    assert modified_task.basis_set == "jun-cc-pvdz"
+    # Expect basis to escalate from aug-cc-pvdz to jun-cc-pvtz
+    assert modified_task.basis_set == "jun-cc-pvtz"
     assert (
-        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+        modified_task.additional_keywords.get("recovery_strategy")
+        == "recover_basis_incompatible_escalate"
     )
     assert len(context.history) == 1
     assert context.history[0]["strategy_name"] == "recover_basis_incompatible"
@@ -92,14 +93,15 @@ def test_escalation_context_apply_scf_failed(sample_task):
     assert context.attempt_count == 1
     assert context.last_error == error
     assert modified_task.id == "test_task_01_retry_1"  # Check correct ID
-    # On 1st attempt, LADDER[0] (recover_basis_incompatible) should run
-    assert modified_task.basis_set == "jun-cc-pvdz"  # Basis should change
+    # On 1st attempt, the first strategy in LADDER for ScfFailed is recover_basis_incompatible
+    assert modified_task.basis_set == "jun-cc-pvtz"  # Basis should change from aug-cc-pvdz
     assert (
         modified_task.additional_keywords.get("d_convergence") == initial_d_conv
     )  # SCF keywords untouched
     assert modified_task.additional_keywords.get("maxiter") == initial_maxiter
     assert (
-        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+        modified_task.additional_keywords.get("recovery_strategy")
+        == "recover_basis_incompatible_escalate"
     )
     assert len(context.history) == 1
 
@@ -119,11 +121,14 @@ def test_escalation_context_apply_memory_exceeded(sample_task):
     assert context.attempt_count == 1
     assert context.last_error == error
     assert modified_task.id == "test_task_01_retry_1"
-    # On 1st attempt, LADDER[0] (recover_basis_incompatible) should run
-    assert modified_task.basis_set == "jun-cc-pvdz"  # Basis should change
-    assert modified_task.additional_keywords.get("memory") == initial_memory  # Memory untouched
+    # On 1st attempt, the first strategy in LADDER for MemoryExceeded is recover_basis_incompatible
+    assert modified_task.basis_set == "jun-cc-pvtz"  # Basis should change from aug-cc-pvdz
     assert (
-        modified_task.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+        modified_task.additional_keywords.get("memory") == initial_memory
+    )  # Memory untouched by this strategy
+    assert (
+        modified_task.additional_keywords.get("recovery_strategy")
+        == "recover_basis_incompatible_escalate"
     )
     assert len(context.history) == 1
 
@@ -167,8 +172,11 @@ def test_escalation_context_apply_second_attempt_scf(sample_task):
     assert context.can_retry(error1) is True  # Sets last_error
     task_retry1 = context.apply()
     assert context.attempt_count == 1
-    assert task_retry1.basis_set == "jun-cc-pvdz"  # Basis changed in returned task
-    assert task_retry1.additional_keywords.get("recovery_strategy") == "recover_basis_incompatible"
+    assert task_retry1.basis_set == "jun-cc-pvtz"  # Basis changed from aug-cc-pvdz
+    assert (
+        task_retry1.additional_keywords.get("recovery_strategy")
+        == "recover_basis_incompatible_escalate"
+    )
 
     # --- Attempt 2 (SCF) --- #
     error2 = ScfFailed("Second error")

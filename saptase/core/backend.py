@@ -4,11 +4,10 @@ import contextlib  # Import contextlib
 import logging
 import os  # Added for getenv
 import re
+import time
 from abc import ABC, abstractmethod
 from importlib import import_module  # Re-add import_module for _has_psi4
 from pathlib import Path  # Ensure Path is imported
-import time
-import math
 
 # from types import ModuleType # No longer needed directly here
 from typing import Any, ClassVar, Dict, List, Optional, Union
@@ -400,7 +399,7 @@ class Psi4Backend(SaptBackend):
     # ------------------------------------------------------------------
     def _calculate_inner(self, task: SaptTask, task_scratch_dir: Union[str, Path]) -> SaptResult:
         """Protected inner calculation logic with Psi4."""
-        result = SaptResult(task_id=task.id, success=False) # Initialize as failure
+        result = SaptResult(task_id=task.id, success=False)  # Initialize as failure
         start_time = time.monotonic()
 
         # Use the context manager around the core Psi4 logic
@@ -603,8 +602,10 @@ class Psi4Backend(SaptBackend):
                 # result.error_code = type(e).__name__
                 # result.basis_set = task.basis_set
                 # result.method = task.method
-                logger.error(f"Task {task.id} failed within _calculate_inner with {type(e).__name__}: {e}. Re-raising.")
-                raise # Re-raise the caught SaptError for the orchestrator
+                logger.error(
+                    f"Task {task.id} failed within _calculate_inner with {type(e).__name__}: {e}. Re-raising."
+                )
+                raise  # Re-raise the caught SaptError for the orchestrator
             except Exception as e:
                 # Catch any other unexpected errors during setup/teardown
                 task.status = TaskStatus.FAILED
@@ -613,7 +614,10 @@ class Psi4Backend(SaptBackend):
                 # result.error_code = type(e).__name__
                 # result.basis_set = task.basis_set
                 # result.method = task.method
-                logger.error(f"Task {task.id} encountered truly unexpected error in _calculate_inner: {e}. Wrapping and re-raising.", exc_info=True)
+                logger.error(
+                    f"Task {task.id} encountered truly unexpected error in _calculate_inner: {e}. Wrapping and re-raising.",
+                    exc_info=True,
+                )
                 # Wrap in a standard SaptError like PsiProgramCrashed if it's not already one
                 if isinstance(e, SaptError):
                     raise
@@ -624,7 +628,7 @@ class Psi4Backend(SaptBackend):
         result.elapsed_time = time.monotonic() - start_time
         # error_code and error_message are set if an exception was caught and re-raised
         # If we reach here without an exception (i.e. success), these remain None
-        return result # This line is only reached if no exception was raised from the try block
+        return result  # This line is only reached if no exception was raised from the try block
 
 
 class CamCaspBackend(SaptBackend):
