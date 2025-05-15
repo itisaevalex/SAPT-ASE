@@ -465,4 +465,21 @@ This file is maintained by the Cascade AI assistant to explicitly track project 
     - Fixed `ruff` error `E402` in `saptase/core/_psi4_compat.py`.
     - Removed temporary debug code.
 
+### May 15, 2025: Implemented Live Caching and Extended Basis Ladder
+- **Live Caching Mechanism:**
+    - Added `from_cache: bool` attribute to `SaptResult` model (`saptase/core/models.py`).
+    - Implemented `to_json` and `from_json` methods in `SaptResult` for serialization.
+    - Created a new `results_cache` table in `saptase/core/logdb.py` with a unique index on `(monomer_a_xyz, monomer_b_xyz, basis_set, method)`.
+    - Added `get_cached_result` method to `LogDb` to retrieve results from `results_cache`.
+    - Updated `LogDb.log_task_attempt` to populate the `results_cache` upon successful task completion.
+    - Integrated a cache check at the beginning of `_execute_task_for_parallel` in `saptase/core/orchestrator.py`. If a cache hit occurs, the stored result is returned, and its `task_id` is updated to the current task's ID.
+    - Updated CLI summary in `saptase/cli.py` to report cache hits and newly computed tasks.
+    - Added `tests/test_cache_hit.py` with `test_cache_skip_with_mock_backend` to verify the caching logic using a mock backend. This test was debugged to ensure correct import paths and task ID handling on cache hits.
+    - Successfully smoke-tested the caching mechanism with a real Psi4 backend using `quick_test_sweep.yml`, confirming that re-runs use cached results.
+- **Basis Ladder Extension:**
+    - Extended `BASIS_LADDER` in `saptase/core/basis.py` to include `jun-cc-pvqz` and `aug-cc-pvqz`.
+    - Updated `DF_BASIS_MAP` in `saptase/core/basis.py` with corresponding JKFIT sets for the new QZ rungs and also included mappings for `def2-qzvp*` basis sets.
+    - Created `tests/test_basis_ladder.py` with comprehensive tests for `get_next_basis`, `get_previous_basis`, `get_basis_rung`, and `get_df_basis` with the extended ladder and DF map.
+    - Verified that `tests/test_basis_escalation.py::test_actual_basis_differs_after_escalation` passes with the extended ladder, demonstrating correct escalation behavior.
+
 ---

@@ -14,6 +14,13 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added ADR-0006 documenting the Pauling-point sweep implementation strategy and rationale.
 - Implemented `scripts/fix_xyz.py` to sanitize monomer XYZ files in `data/s22_split/` as per ADR-0006 D2.
 - Added detailed energy result reporting (total and components in kcal/mol and Hartrees) to the console output in `saptase/cli.py` for successfully completed tasks.
+- Implemented a live caching mechanism for SAPT calculations. Results for identical tasks (monomer A/B XYZ, basis set, method) are retrieved from a cache (`results_cache` table in `runs.sqlite`), skipping re-computation. The CLI summary now reports cache hits.
+- Extended the `BASIS_LADDER` and `DF_BASIS_MAP` in `saptase/core/basis.py` to include `jun-cc-pvqz` and `aug-cc-pvqz` rungs, along with their corresponding JKFIT sets. This allows for basis escalation to QZ levels.
+- Added `tests/test_basis_ladder.py` to verify navigation and DF-mapping for the extended basis ladder.
+- Added `from_cache: bool` attribute to `SaptResult` model.
+- Added `get_cached_result` and cache population logic to `LogDb`.
+- Integrated cache check into `saptase.core.orchestrator._execute_task_for_parallel`.
+- Added `tests/test_cache_hit.py` to verify the caching mechanism.
 
 ### Changed
 - Modified GitHub Actions workflow (`.github/workflows/ci.yml`):

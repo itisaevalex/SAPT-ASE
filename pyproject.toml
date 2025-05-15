@@ -88,6 +88,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "dask: marks tests that require Dask (can be skipped with '-m \"not dask\"')",
     "psi4: marks tests requiring a real Psi4 installation",
+    "fast: marks tests as fast to run (can be selected with '-m fast')",
 ]
 log_cli = true
 log_cli_level = "DEBUG"
