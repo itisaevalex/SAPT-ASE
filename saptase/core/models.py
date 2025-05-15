@@ -173,6 +173,11 @@ class SaptResult:
         attempt_number: The 0-based index of the attempt that generated this result.
         error_code: Specific error code (e.g., 'BasisIncompatible') if success is False.
         error_details: Additional details about the error or recovery history (e.g., JSON string).
+        # Fields for deduplication and detailed logging
+        monomer_a_xyz: Optional[str] = None
+        monomer_b_xyz: Optional[str] = None
+        timestamp_utc: Optional[str] = None # ISO 8601 format string
+        actual_basis_set: Optional[str] = None # Basis set finally used, after any escalation
     """
 
     task_id: str
@@ -187,6 +192,11 @@ class SaptResult:
     attempt_number: Optional[int] = None
     error_code: Optional[str] = None
     error_details: Optional[str] = None
+    # Fields for deduplication and detailed logging
+    monomer_a_xyz: Optional[str] = None
+    monomer_b_xyz: Optional[str] = None
+    timestamp_utc: Optional[str] = None # ISO 8601 format string
+    actual_basis_set: Optional[str] = None # Basis set finally used, after any escalation
 
     @property
     def total_energy(self) -> float:

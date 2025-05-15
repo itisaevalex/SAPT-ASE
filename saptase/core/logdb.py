@@ -190,12 +190,16 @@ class LogDb:
                         attempt_number INTEGER NOT NULL,
                         basis_set TEXT,
                         method TEXT,
+                        monomer_a_xyz TEXT,          -- Added for deduplication key
+                        monomer_b_xyz TEXT,          -- Added for deduplication key
+                        timestamp_utc TEXT,          -- Added for tie-breaking duplicates
+                        actual_basis_set TEXT,       -- Basis set finally used, after escalation
                         status TEXT NOT NULL,      -- e.g., COMPLETED, FAILED, RETRYING
                         error_message TEXT,    -- Null if success
                         error_code TEXT, -- Store the SaptError class name on failure
                         error_details TEXT, -- Store traceback or context history JSON
                         elapsed_time REAL,     -- Wall time in seconds
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP -- Original log timestamp
                     )
                 """
                 )
@@ -249,22 +253,32 @@ class LogDb:
         # Get all relevant fields directly from the enriched SaptResult
         attempt_number = getattr(result, "attempt_number", 1)  # Default to 1 if not set
         error_details = getattr(result, "error_details", None)
+        monomer_a_xyz = getattr(result, "monomer_a_xyz", None)
+        monomer_b_xyz = getattr(result, "monomer_b_xyz", None)
+        timestamp_utc_result = getattr(result, "timestamp_utc", None)
+        actual_basis_set = getattr(result, "actual_basis_set", None)
 
         try:
             self.cursor.execute(
                 """
                 INSERT INTO task_log (
                     run_id, task_id, attempt_number, basis_set, method,
+                    monomer_a_xyz, monomer_b_xyz, timestamp_utc,
+                    actual_basis_set, -- Added column
                     status, error_message, error_code, error_details, elapsed_time
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     run_id,
                     result.task_id,
                     attempt_number,  # Now properly 1-based in the result
-                    result.basis_set,
+                    result.basis_set, # This is the *attempted* basis for this log entry
                     result.method,
+                    monomer_a_xyz, 
+                    monomer_b_xyz, 
+                    timestamp_utc_result,
+                    actual_basis_set, # Value for new column
                     status,
                     result.error_message if not result.success else None,
                     result.error_code if not result.success else None,
@@ -341,6 +355,109 @@ class LogDb:
             # Re-raising to make it clear that connection should exist
             raise sqlite3.OperationalError("Database connection is not available.")
         return self.conn
+
+    def get_task_status(self, task_id: str, run_id: Optional[str] = None) -> Optional[TaskStatus]:
+        # This is a simplified stub, actual implementation might query DB
+        # For the purpose of this flow, we assume it works or is not critical
+        # to the deduplicate logic itself.
+        logger.debug(f"get_task_status called for {task_id}, {run_id} - returning None (stub)")
+        return None
+
+    def deduplicate(self, overwrite: bool = False) -> int:
+        """Identify and remove duplicate task results from the task_log table.
+
+        Duplicates are identified by a canonical key comprising:
+        monomer_a_xyz, monomer_b_xyz, basis_set, method.
+
+        Args:
+            overwrite: If False (default), keeps the OLDEST (smallest log_id) entry
+                       among duplicates and removes newer ones.
+                       If True, keeps the NEWEST (largest log_id) entry among
+                       duplicates and removes older ones.
+
+        Returns:
+            The number of rows removed.
+        """
+        if not self.conn or not self.cursor:
+            logger.error("Database not connected, cannot perform deduplication.")
+            return 0
+
+        total_rows_removed = 0
+        try:
+            # Define the canonical key fields
+            key_fields = ["monomer_a_xyz", "monomer_b_xyz", "basis_set", "method"]
+            key_fields_str = ", ".join(key_fields)
+
+            # Find all unique canonical keys that have duplicates
+            self.cursor.execute(f"""
+                SELECT {key_fields_str}, COUNT(*) as count
+                FROM task_log
+                GROUP BY {key_fields_str}
+                HAVING COUNT(*) > 1
+            """)
+            duplicate_groups = self.cursor.fetchall()
+
+            for group_key_values in duplicate_groups:
+                # The actual key values are all but the last element (count)
+                key_values = group_key_values[:-1]
+                
+                # Build the WHERE clause for this specific group
+                where_clauses = []
+                for i, field_name in enumerate(key_fields):
+                    # Handle NULL values correctly in SQL
+                    if key_values[i] is None:
+                        where_clauses.append(f"{field_name} IS NULL")
+                    else:
+                        where_clauses.append(f"{field_name} = ?")
+                where_clause_str = " AND ".join(where_clauses)
+                
+                # Parameters for the WHERE clause (excluding NULLs, as they are handled by 'IS NULL')
+                params_for_where = tuple(kv for kv in key_values if kv is not None)
+
+                # Determine which log_id to keep
+                order_by_log_id = "ASC" if not overwrite else "DESC" # ASC for min log_id (oldest), DESC for max log_id (newest)
+                self.cursor.execute(f"""
+                    SELECT log_id FROM task_log
+                    WHERE {where_clause_str}
+                    ORDER BY log_id {order_by_log_id}
+                    LIMIT 1
+                """, params_for_where)
+                
+                row_to_keep = self.cursor.fetchone()
+                if not row_to_keep:
+                    logger.warning(f"Could not determine row to keep for group {key_values}, skipping.")
+                    continue
+                log_id_to_keep = row_to_keep[0]
+
+                # Delete other rows in this group
+                # Add log_id_to_keep to the parameters for the DELETE statement
+                params_for_delete = params_for_where + (log_id_to_keep,)
+                
+                delete_query = f"""
+                    DELETE FROM task_log
+                    WHERE {where_clause_str} AND log_id != ?
+                """
+                self.cursor.execute(delete_query, params_for_delete)
+                rows_removed_for_group = self.cursor.rowcount
+                total_rows_removed += rows_removed_for_group
+                logger.debug(f"Deduplicated group {key_values}: kept log_id {log_id_to_keep}, removed {rows_removed_for_group} rows.")
+
+            if total_rows_removed > 0:
+                self.conn.commit() # Commit changes if any rows were deleted
+                logger.info(f"Successfully removed {total_rows_removed} duplicate rows. Overwrite={overwrite}.")
+            else:
+                logger.info(f"No duplicate rows found to remove. Overwrite={overwrite}.")
+
+        except sqlite3.Error as e:
+            logger.error(f"Error during deduplication: {e}", exc_info=True)
+            if self.conn: # Rollback in case of error during transaction
+                try:
+                    self.conn.rollback()
+                except sqlite3.Error as rb_err:
+                    logger.error(f"Rollback failed: {rb_err}")
+            return 0 # Or re-raise, depending on desired error handling
+        
+        return total_rows_removed
 
     def close(self):
         """Commit changes and close the database connection."""

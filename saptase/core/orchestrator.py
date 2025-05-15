@@ -210,6 +210,7 @@ def _execute_task_for_parallel(
                             task.basis_set
                         )  # Ensure these are set from task state
                         task_result.method = task.method
+                        task_result.actual_basis_set = task.basis_set
 
                         # Log this successful attempt to the database and close connection
                         logdb.log_task_attempt(run_id=run_id, result=task_result)

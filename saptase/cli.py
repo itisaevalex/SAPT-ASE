@@ -17,6 +17,7 @@ from .core.interop.yaml import load_config  # YAML loader
 from .core.logdb import LogDb  # Added import
 from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
+from .core.exceptions import SapSaptaseError, ConfigError
 
 logger = logging.getLogger(__name__)  # Use module-level logger
 
@@ -417,6 +418,21 @@ def results_command(args: argparse.Namespace):
         db.close()  # Ensure database connection is closed
 
 
+def run_dedup(args):
+    """Handler for the 'saptase dedup' command."""
+    try:
+        db = LogDb(args.db)
+        logger.info(f"Attempting to deduplicate database: {args.db}")
+        logger.info(f"Mode: keep {'newest' if args.overwrite else 'oldest'} entries for duplicates.")
+        removed_count = db.deduplicate(overwrite=args.overwrite)
+        logger.info(f"Removed {removed_count} duplicate row(s).")
+        db.close()
+    except Exception as e:
+        logger.error(f"Error during deduplication: {e}", exc_info=True)
+        # Consider exiting with a non-zero status code for errors
+        # sys.exit(1) 
+
+
 def main(argv: Optional[List[str]] = None):
     """
     Main entry point for the SAPTASE CLI.
@@ -534,6 +550,30 @@ def main(argv: Optional[List[str]] = None):
     results_parser.add_argument("run_id", help="The specific run_id to fetch results for.")
     results_parser.set_defaults(func=results_command)
 
+    # --- 'dedup' subcommand ---
+    dedup_parser = subparsers.add_parser(
+        "dedup", 
+        help="Identify and remove duplicate results from the task_log table in a database.",
+        description=(
+            "Scans the task_log table for entries that are computationally identical "
+            "(based on monomers, basis set, and method). "
+            "By default, it keeps the oldest entry (by log_id) and removes newer duplicates. "
+            "Use --overwrite to keep the newest entry instead."
+        )
+    )
+    dedup_parser.add_argument(
+        "db", 
+        type=str, 
+        help="Path to the saptase SQLite database file (e.g., runs/runs.sqlite)."
+    )
+    dedup_parser.add_argument(
+        "--overwrite", 
+        action="store_true", 
+        help="If set, keep the newest (largest log_id) entry among duplicates and remove older ones. "
+             "Default is to keep the oldest (smallest log_id)."
+    )
+    dedup_parser.set_defaults(func=run_dedup)
+
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands
     # ------------------------------------------------------------------
@@ -569,7 +609,24 @@ def main(argv: Optional[List[str]] = None):
         EXECUTION.keep_scratch = True
 
     # Call the function associated with the chosen subcommand
-    args.func(args)
+    if hasattr(args, "func"):
+        try:
+            args.func(args)
+        except SapSaptaseError as e:
+            logger.error(f"Error: {e}")
+            # Optionally, set a specific exit code for SapSaptaseError
+            # For example, sys.exit(1) or a custom code
+        except ConfigError as e: # Specifically catch ConfigError for more targeted messages
+            logger.error(f"Configuration Error: {e}")
+            logger.error("Please check your YAML file and CLI arguments.")
+            # sys.exit(config_error_exit_code) 
+        # Generic catch for other unexpected errors is good practice too
+        # except Exception as e:
+        #     logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        #     # sys.exit(unexpected_error_exit_code)
+    else:
+        # This case should ideally not be reached if subcommands are required
+        parser.print_help()
 
 
 if __name__ == "__main__":
