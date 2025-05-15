@@ -43,13 +43,13 @@ class LogDb:
         self.wal_mode = wal_mode
         self.conn: Optional[sqlite3.Connection] = None
         self.cursor: Optional[sqlite3.Cursor] = None
-        self._closed = False # For idempotent close
+        self._closed = False  # For idempotent close
 
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             logger.error(f"Failed to create directory for database {self.db_path.parent}: {e}")
-            return # Cannot proceed
+            return  # Cannot proceed
 
         try:
             self._connect_and_initialize_db()
@@ -62,7 +62,7 @@ class LogDb:
                 logger.critical(
                     f"Unexpected DatabaseError connecting to {self.db_path}: {e}", exc_info=True
                 )
-                self._safe_close() # Ensure resources are released
+                self._safe_close()  # Ensure resources are released
                 # Propagate or handle as a critical failure
                 raise
         except Exception as general_exc:  # Catch any other unexpected error during init
@@ -71,13 +71,13 @@ class LogDb:
                 exc_info=True,
             )
             self._safe_close()
-            raise # Or handle as appropriate
+            raise  # Or handle as appropriate
 
     def _connect_and_initialize_db(self):
         """Internal helper to connect, setup WAL/timeout, and initialize schema."""
         # Ensure any previous connection is closed before re-attempting
         self._safe_close()
-        self._closed = False # Reset closed state
+        self._closed = False  # Reset closed state
 
         try:
             self.conn = sqlite3.connect(self.db_path, isolation_level=None)  # Autocommit
@@ -90,46 +90,44 @@ class LogDb:
                     logger.warning(
                         f"Could not enable WAL journal mode for {self.db_path}. Current mode: {journal_mode[0]}. Concurrency issues might occur."
                     )
-            
+
             self.cursor.execute("PRAGMA busy_timeout=10000;")
             self._initialize_schema()  # Renamed from _initialize_db for clarity
         except sqlite3.Error as e:
             logger.error(f"Error during database connection or initial setup: {e}")
-            self._safe_close() # Clean up on error
-            raise # Re-raise to be caught by __init__ or caller
+            self._safe_close()  # Clean up on error
+            raise  # Re-raise to be caught by __init__ or caller
 
     def _recover_from_corruption(self, original_exception: sqlite3.DatabaseError):
         """Handles database corruption by backing up the old file and creating a new one."""
         logger.error(
             f"Database file {self.db_path} appears corrupt or malformed: {original_exception}. Attempting recovery..."
         )
-        self._safe_close() # Ensure connection related to corrupt DB is closed
+        self._safe_close()  # Ensure connection related to corrupt DB is closed
 
-        backup_path = self.db_path.with_suffix(
-            f"{self.db_path.suffix}.bak_{int(time.time())}"
-        )
+        backup_path = self.db_path.with_suffix(f"{self.db_path.suffix}.bak_{int(time.time())}")
         try:
             logger.warning(f"Renaming corrupt database to {backup_path}")
-            if backup_path.exists(): # Should be rare
+            if backup_path.exists():  # Should be rare
                 logger.warning(f"Backup file {backup_path} already exists. Removing before rename.")
                 backup_path.unlink()
             self.db_path.rename(backup_path)
-            
+
             logger.info(f"Attempting to create a fresh database at {self.db_path}")
-            self._connect_and_initialize_db() # Try to connect and init the new DB
-            logger.info(
-                f"Successfully created and connected to new database: {self.db_path}"
-            )
+            self._connect_and_initialize_db()  # Try to connect and init the new DB
+            logger.info(f"Successfully created and connected to new database: {self.db_path}")
         except OSError as rename_err:
             logger.critical(
                 f"Failed to rename corrupt database {self.db_path} to {backup_path}: {rename_err}. Cannot log provenance.",
                 exc_info=True,
             )
             # Mark as unusable
-            self.conn = None 
+            self.conn = None
             self.cursor = None
-            self._closed = True 
-            raise ConnectionError(f"Failed to recover from DB corruption for {self.db_path}") from rename_err
+            self._closed = True
+            raise ConnectionError(
+                f"Failed to recover from DB corruption for {self.db_path}"
+            ) from rename_err
         except sqlite3.Error as second_conn_err:
             logger.critical(
                 f"Failed to connect/initialize new database {self.db_path} after corruption recovery: {second_conn_err}",
@@ -138,7 +136,9 @@ class LogDb:
             self.conn = None
             self.cursor = None
             self._closed = True
-            raise ConnectionError(f"Failed to initialize new DB after corruption for {self.db_path}") from second_conn_err
+            raise ConnectionError(
+                f"Failed to initialize new DB after corruption for {self.db_path}"
+            ) from second_conn_err
         except Exception as recovery_exc:
             logger.critical(
                 f"Unexpected error during database corruption recovery: {recovery_exc}",
@@ -147,9 +147,11 @@ class LogDb:
             self.conn = None
             self.cursor = None
             self._closed = True
-            raise ConnectionError(f"Unexpected error during DB recovery for {self.db_path}") from recovery_exc
+            raise ConnectionError(
+                f"Unexpected error during DB recovery for {self.db_path}"
+            ) from recovery_exc
 
-    def _initialize_schema(self): # Renamed from _initialize_db
+    def _initialize_schema(self):  # Renamed from _initialize_db
         """Create necessary tables and metadata if they don't exist."""
         if not self.conn or not self.cursor:
             return
@@ -224,15 +226,19 @@ class LogDb:
 
     def __enter__(self):
         """Enter the runtime context related to this object."""
-        if self._closed or not self.conn: # If init failed or already closed
-             # Try to re-establish connection if it makes sense for your use case
-             # For now, let's assume __init__ must succeed or it's an error to re-enter
-             logger.warning(f"LogDb context entered but connection for {self.db_path} is not active or was closed.")
-             # Optionally, could try self._connect_and_initialize_db() again if appropriate
-             # but this might hide issues if __init__ failed critically.
-             # If __init__ failed, conn might be None.
-             if not self.conn:
-                 raise sqlite3.OperationalError(f"Cannot enter context, LogDb for {self.db_path} was not properly initialized or is closed.")
+        if self._closed or not self.conn:  # If init failed or already closed
+            # Try to re-establish connection if it makes sense for your use case
+            # For now, let's assume __init__ must succeed or it's an error to re-enter
+            logger.warning(
+                f"LogDb context entered but connection for {self.db_path} is not active or was closed."
+            )
+            # Optionally, could try self._connect_and_initialize_db() again if appropriate
+            # but this might hide issues if __init__ failed critically.
+            # If __init__ failed, conn might be None.
+            if not self.conn:
+                raise sqlite3.OperationalError(
+                    f"Cannot enter context, LogDb for {self.db_path} was not properly initialized or is closed."
+                )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -257,14 +263,13 @@ class LogDb:
                 self.conn = None
         self._closed = True
 
-
     def close(self):
         """Close the database connection if it's open. Idempotent."""
         if not self._closed and self.conn:
             logger.info(f"Closing provenance database connection: {self.db_path}")
             self._safe_close()
         # else:
-            # logger.debug(f"Connection to {self.db_path} already closed or never opened.")
+        # logger.debug(f"Connection to {self.db_path} already closed or never opened.")
 
     def log_task_attempt(self, run_id: str, result: SaptResult):
         """Log a task attempt to the database.
@@ -411,21 +416,28 @@ class LogDb:
         """
         if not self.conn or not self.cursor:
             logger.error("Database not connected, cannot perform deduplication.")
-            return [] # Return empty list
+            return []  # Return empty list
 
-        removed_log_ids_from_task_log: list[int] = [] # Store removed log_ids
+        removed_log_ids_from_task_log: list[int] = []  # Store removed log_ids
         try:
             # Define the canonical key fields, using COALESCE for basis set
-            key_fields_for_select = ["monomer_a_xyz", "monomer_b_xyz", "COALESCE(actual_basis_set, basis_set) AS effective_basis", "method"]
-            key_fields_for_group_by = ["monomer_a_xyz", "monomer_b_xyz", "effective_basis", "method"] # Use alias for GROUP BY
-            
-            # Fields to use in WHERE clauses (without alias for COALESCE)
-            key_fields_for_where = ["monomer_a_xyz", "monomer_b_xyz", "basis_set", "actual_basis_set", "method"]
+            key_fields_for_select = [
+                "monomer_a_xyz",
+                "monomer_b_xyz",
+                "COALESCE(actual_basis_set, basis_set) AS effective_basis",
+                "method",
+            ]
+            key_fields_for_group_by = [
+                "monomer_a_xyz",
+                "monomer_b_xyz",
+                "effective_basis",
+                "method",
+            ]  # Use alias for GROUP BY
 
+            # Fields to use in WHERE clauses (without alias for COALESCE)
 
             select_key_fields_str = ", ".join(key_fields_for_select)
             group_by_key_fields_str = ", ".join(key_fields_for_group_by)
-
 
             # Find all unique canonical keys that have duplicates
             # Note: SQLite might require the COALESCE expression directly in GROUP BY if alias isn't recognized there in all versions.
@@ -442,49 +454,72 @@ class LogDb:
 
             if not duplicate_groups:
                 logger.info(f"No duplicate groups found to process. Overwrite={overwrite}.")
-                return [] # Return empty list
+                return []  # Return empty list
 
             for group_key_values_with_count in duplicate_groups:
                 # group_key_values are (monomer_a_xyz, monomer_b_xyz, effective_basis, method)
-                group_key_values = group_key_values_with_count[:-1] # Exclude count
+                group_key_values = group_key_values_with_count[:-1]  # Exclude count
 
                 # Construct WHERE clause for selecting all tasks in this duplicate group
-                where_clauses = [
+                [
                     "monomer_a_xyz IS ?" if group_key_values[0] is None else "monomer_a_xyz = ?",
                     "monomer_b_xyz IS ?" if group_key_values[1] is None else "monomer_b_xyz = ?",
                     # For effective_basis, we need to check both actual_basis_set and basis_set matching the COALESCE logic
                     "( (actual_basis_set IS ? AND basis_set IS ?) OR (actual_basis_set = ? AND actual_basis_set IS NOT NULL) OR (basis_set = ? AND actual_basis_set IS NULL) )",
-                    "method IS ?" if group_key_values[3] is None else "method = ?"
+                    "method IS ?" if group_key_values[3] is None else "method = ?",
                 ]
-                
+
                 # Parameters for the WHERE clause based on the group_key_values
                 # group_key_values[0] = monomer_a_xyz
                 # group_key_values[1] = monomer_b_xyz
                 # group_key_values[2] = effective_basis (from COALESCE)
                 # group_key_values[3] = method
-                params_for_where = [
-                    group_key_values[0], 
+                [
+                    group_key_values[0],
                     group_key_values[1],
                     # Params for COALESCE logic:
-                    group_key_values[2], # actual_basis_set IS effective_basis (when basis_set IS also effective_basis, handles NULL actual_basis_set correctly)
-                    group_key_values[2], # basis_set IS effective_basis (when actual_basis_set IS effective_basis)
-                    group_key_values[2], # actual_basis_set = effective_basis (actual_basis_set IS NOT NULL case)
-                    group_key_values[2], # basis_set = effective_basis (actual_basis_set IS NULL case)
-                    group_key_values[3]
+                    group_key_values[
+                        2
+                    ],  # actual_basis_set IS effective_basis (when basis_set IS also effective_basis, handles NULL actual_basis_set correctly)
+                    group_key_values[
+                        2
+                    ],  # basis_set IS effective_basis (when actual_basis_set IS effective_basis)
+                    group_key_values[
+                        2
+                    ],  # actual_basis_set = effective_basis (actual_basis_set IS NOT NULL case)
+                    group_key_values[
+                        2
+                    ],  # basis_set = effective_basis (actual_basis_set IS NULL case)
+                    group_key_values[3],
                 ]
-                
+
                 # Refine parameter list to remove Nones if "IS ?" was used, or adjust based on exact SQL needs for COALESCE matching
                 # This part is tricky. Let's simplify the WHERE to directly use COALESCE.
                 where_clauses_for_coalesce = [
-                    f"{key_fields_for_group_by[0]} IS ?" if group_key_values[0] is None else f"{key_fields_for_group_by[0]} = ?",
-                    f"{key_fields_for_group_by[1]} IS ?" if group_key_values[1] is None else f"{key_fields_for_group_by[1]} = ?",
-                    f"COALESCE(actual_basis_set, basis_set) IS ?" if group_key_values[2] is None else f"COALESCE(actual_basis_set, basis_set) = ?",
-                    f"{key_fields_for_group_by[3]} IS ?" if group_key_values[3] is None else f"{key_fields_for_group_by[3]} = ?",
+                    (
+                        f"{key_fields_for_group_by[0]} IS ?"
+                        if group_key_values[0] is None
+                        else f"{key_fields_for_group_by[0]} = ?"
+                    ),
+                    (
+                        f"{key_fields_for_group_by[1]} IS ?"
+                        if group_key_values[1] is None
+                        else f"{key_fields_for_group_by[1]} = ?"
+                    ),
+                    (
+                        "COALESCE(actual_basis_set, basis_set) IS ?"
+                        if group_key_values[2] is None
+                        else "COALESCE(actual_basis_set, basis_set) = ?"
+                    ),
+                    (
+                        f"{key_fields_for_group_by[3]} IS ?"
+                        if group_key_values[3] is None
+                        else f"{key_fields_for_group_by[3]} = ?"
+                    ),
                 ]
                 where_clause_str = " AND ".join(where_clauses_for_coalesce)
                 # Params for the simplified WHERE clause using group_key_values directly
                 current_params_for_where = [val for val in group_key_values]
-
 
                 order_by_log_id = "ASC" if not overwrite else "DESC"
                 self.cursor.execute(
@@ -523,9 +558,9 @@ class LogDb:
                     current_group_removed_log_ids.append(log_id_del)
                     # Delete from 'results' table first
                     self.cursor.execute(
-                        f"""
+                        """
                         DELETE FROM results
-                        WHERE run_id = ? AND task_id = ? 
+                        WHERE run_id = ? AND task_id = ?
                           AND NOT EXISTS (SELECT 1 FROM task_log tl WHERE tl.run_id = results.run_id AND tl.task_id = results.task_id AND tl.log_id = ?)
                         """,
                         (run_id_del, task_id_del, log_id_del),
@@ -535,9 +570,9 @@ class LogDb:
                             f"Deleted from results: run_id={run_id_del}, task_id={task_id_del} (associated with log_id {log_id_del})"
                         )
                         deleted_from_results_count += self.cursor.rowcount
-                
+
                 if deleted_from_results_count > 0:
-                     logger.info(
+                    logger.info(
                         f"Removed {deleted_from_results_count} row(s) from 'results' table for duplicate group based on effective key {group_key_values}."
                     )
 
@@ -556,13 +591,15 @@ class LogDb:
                         f"Deduplicated group with effective key {group_key_values} in task_log: kept log_id {log_id_to_keep}, removed {rows_removed_for_group_task_log} rows (log_ids: {current_group_removed_log_ids})."
                     )
 
-            if removed_log_ids_from_task_log: # Check if any IDs were actually collected
-                self.conn.commit() # Commit only if changes were made
+            if removed_log_ids_from_task_log:  # Check if any IDs were actually collected
+                self.conn.commit()  # Commit only if changes were made
                 logger.info(
                     f"Successfully removed {len(removed_log_ids_from_task_log)} duplicate rows from task_log. IDs: {removed_log_ids_from_task_log}. Overwrite={overwrite}."
                 )
             else:
-                logger.info(f"No duplicate rows were identified or removed from task_log based on effective basis. Overwrite={overwrite}.")
+                logger.info(
+                    f"No duplicate rows were identified or removed from task_log based on effective basis. Overwrite={overwrite}."
+                )
 
         except sqlite3.Error as e:
             logger.error(f"Error during deduplication: {e}", exc_info=True)
@@ -571,6 +608,6 @@ class LogDb:
                     self.conn.rollback()
                 except sqlite3.Error as rb_err:
                     logger.error(f"Rollback failed: {rb_err}")
-            return [] # Return empty list on error
+            return []  # Return empty list on error
 
         return removed_log_ids_from_task_log
