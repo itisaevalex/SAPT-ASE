@@ -349,6 +349,39 @@ def run_command(args: argparse.Namespace):
             f"Workflow finished. Tasks completed: {success_count}, Tasks failed: {fail_count}"
         )
         # Add more detailed reporting if needed
+
+        # ADDED: Detailed reporting for successful tasks
+        logger.info("--- Detailed Task Results ---")
+        for task_id, res_obj in results.items():
+            if res_obj.success and hasattr(res_obj, 'energies') and res_obj.energies:
+                # Energies are typically in Hartrees from Psi4
+                e_tot_hartree = sum(res_obj.energies.values())
+                
+                # Conversion factor from Hartree to kcal/mol
+                HARTREE_TO_KCAL_MOL = 627.50960803 
+                e_tot_kcal_mol = e_tot_hartree * HARTREE_TO_KCAL_MOL
+                
+                energies_kcal_mol_str_parts = []
+                for k, v_hartree in res_obj.energies.items():
+                    v_kcal_mol = v_hartree * HARTREE_TO_KCAL_MOL
+                    energies_kcal_mol_str_parts.append(f"{k}={v_kcal_mol:.4f}")
+                energies_kcal_mol_display = ", ".join(energies_kcal_mol_str_parts)
+
+                logger.info(f"  Task: {task_id}")
+                logger.info(f"    Status: COMPLETED")
+                logger.info(f"    Total SAPT Interaction Energy: {e_tot_kcal_mol:.4f} kcal/mol ({e_tot_hartree:.8f} Ha)")
+                logger.info(f"    Components (kcal/mol): {energies_kcal_mol_display}")
+                # Optionally log raw Hartree components if needed for extreme precision
+                # logger.info(f"    Components (Ha): {res_obj.energies}")
+            elif not res_obj.success:
+                logger.info(f"  Task: {task_id}")
+                logger.info(f"    Status: FAILED")
+                logger.info(f"    Error: {getattr(res_obj, 'error_message', 'N/A')}")
+                logger.info(f"    Error Code: {getattr(res_obj, 'error_code', 'N/A')}")
+            else: # Successful but no energies attribute or it's empty
+                logger.info(f"  Task: {task_id}")
+                logger.info(f"    Status: COMPLETED (energies attribute missing or empty in SaptResult object)")
+
     else:
         logger.warning("Workflow execution did not return results.")
 

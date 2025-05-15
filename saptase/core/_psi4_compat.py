@@ -1,6 +1,5 @@
 from importlib import import_module
 
-# # open("psi4_compat_executed.txt", "w").write("executed") # DEBUG MARKER # Re-commented out
 """
 Internal helper that loads Psi4 *and* all the symbols the backend needs,
 no matter which Psi4 minor version is installed.
