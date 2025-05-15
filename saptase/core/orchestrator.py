@@ -7,6 +7,7 @@ This module contains the main workflow logic for SAPT calculations.
 import concurrent.futures
 import json
 import logging
+import multiprocessing  # Add this import
 import os
 import time  # For timing
 import uuid  # For run IDs
@@ -541,7 +542,9 @@ class SaptWorkflow:
 
         # Execute tasks using ProcessPoolExecutor
         results_list = []
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers, mp_context=multiprocessing.get_context("spawn")
+        ) as executor:
             # Map future to original task ID
             future_to_task_id = {
                 executor.submit(
