@@ -201,4 +201,6 @@ def test_psi4_scf_failure_all_attempts(mock_psi4, psi4_backend, sample_task):
     # The last error raised by the mock would be for attempt `num_attempts`.
     # The actual string representation of the mock exception seems to be more detailed.
     assert (
-        f"Last error: Could not converge SCF failed on attempt {num_attempts} in 9
+        f"Last error: Could not converge SCF failed on attempt {num_attempts} in 99 iterations."
+        in str(excinfo.value)
+    )
