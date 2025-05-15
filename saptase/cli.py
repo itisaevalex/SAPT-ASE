@@ -14,6 +14,7 @@ import numpy as np  # Needed for Molecule coordinates
 
 from .config import EXECUTION  # Global scratch config
 from .core.interop.yaml import load_config  # YAML loader
+from .core.logdb import LogDb  # Added import
 from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
 
@@ -353,14 +354,14 @@ def run_command(args: argparse.Namespace):
         # ADDED: Detailed reporting for successful tasks
         logger.info("--- Detailed Task Results ---")
         for task_id, res_obj in results.items():
-            if res_obj.success and hasattr(res_obj, 'energies') and res_obj.energies:
+            if res_obj.success and hasattr(res_obj, "energies") and res_obj.energies:
                 # Energies are typically in Hartrees from Psi4
                 e_tot_hartree = sum(res_obj.energies.values())
-                
+
                 # Conversion factor from Hartree to kcal/mol
-                HARTREE_TO_KCAL_MOL = 627.50960803 
+                HARTREE_TO_KCAL_MOL = 627.50960803
                 e_tot_kcal_mol = e_tot_hartree * HARTREE_TO_KCAL_MOL
-                
+
                 energies_kcal_mol_str_parts = []
                 for k, v_hartree in res_obj.energies.items():
                     v_kcal_mol = v_hartree * HARTREE_TO_KCAL_MOL
@@ -368,22 +369,52 @@ def run_command(args: argparse.Namespace):
                 energies_kcal_mol_display = ", ".join(energies_kcal_mol_str_parts)
 
                 logger.info(f"  Task: {task_id}")
-                logger.info(f"    Status: COMPLETED")
-                logger.info(f"    Total SAPT Interaction Energy: {e_tot_kcal_mol:.4f} kcal/mol ({e_tot_hartree:.8f} Ha)")
+                logger.info("    Status: COMPLETED")
+                logger.info(
+                    f"    Total SAPT Interaction Energy: {e_tot_kcal_mol:.4f} kcal/mol ({e_tot_hartree:.8f} Ha)"
+                )
                 logger.info(f"    Components (kcal/mol): {energies_kcal_mol_display}")
                 # Optionally log raw Hartree components if needed for extreme precision
                 # logger.info(f"    Components (Ha): {res_obj.energies}")
             elif not res_obj.success:
                 logger.info(f"  Task: {task_id}")
-                logger.info(f"    Status: FAILED")
+                logger.info("    Status: FAILED")
                 logger.info(f"    Error: {getattr(res_obj, 'error_message', 'N/A')}")
                 logger.info(f"    Error Code: {getattr(res_obj, 'error_code', 'N/A')}")
-            else: # Successful but no energies attribute or it's empty
+            else:  # Successful but no energies attribute or it's empty
                 logger.info(f"  Task: {task_id}")
-                logger.info(f"    Status: COMPLETED (energies attribute missing or empty in SaptResult object)")
+                logger.info(
+                    "    Status: COMPLETED (energies attribute missing or empty in SaptResult object)"
+                )
 
     else:
         logger.warning("Workflow execution did not return results.")
+
+    print("\nStandard workflow execution finished.")
+
+
+def results_command(args: argparse.Namespace):
+    """Handles the 'results' subcommand to fetch and display run results."""
+    logger.info(f"Fetching results for run_id: {args.run_id}")
+    db = LogDb()  # Assumes default db_path='runs/runs.sqlite'
+    try:
+        run_results = db.fetch_results(args.run_id)
+        if not run_results:
+            print(f"No results found for run_id '{args.run_id}'.", file=sys.stderr)
+            print(
+                "Please ensure the run_id is correct and the run completed successfully.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f"\n--- Results for Run ID: {args.run_id} ---")
+        print(json.dumps(run_results, indent=2))
+
+    except Exception as e:
+        print(f"Error fetching or displaying results: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        db.close()  # Ensure database connection is closed
 
 
 def main(argv: Optional[List[str]] = None):
@@ -495,6 +526,13 @@ def main(argv: Optional[List[str]] = None):
         help="Limit max workers for tasks identified as using a 'big basis' (e.g., QZ or 5Z). Default: use general workers limit. (Feature requires further integration in workflow logic)",
     )
     parser_run.set_defaults(func=run_command)
+
+    # --- 'results' subcommand --- (New subcommand)
+    results_parser = subparsers.add_parser(
+        "results", help="Fetch and display detailed results for a completed run_id."
+    )
+    results_parser.add_argument("run_id", help="The specific run_id to fetch results for.")
+    results_parser.set_defaults(func=results_command)
 
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands

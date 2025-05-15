@@ -1,6 +1,7 @@
 # saptase/core/logdb.py
 """Handles logging task provenance to a SQLite database."""
 
+import json
 import logging
 import sqlite3
 import time
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 # writer throughput compared to the default rollback journal.
 
 # Define the database schema version (for potential future migrations)
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = 2
 
 
 class TaskStatus(Enum):
@@ -202,14 +203,30 @@ class LogDb:
                 self.cursor.execute("CREATE INDEX idx_task_id ON task_log (task_id)")
                 logger.info("Created task_log table and indices.")
 
+            # --- New table for successful results --------------------------
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS results (
+                    run_id         TEXT NOT NULL,
+                    task_id        TEXT NOT NULL,
+                    energies_json  TEXT,
+                    PRIMARY KEY (run_id, task_id)
+                )
+                """
+            )
+            logger.info("Ensured results table exists.")
+
             # Check schema version (simple check for now)
             self.cursor.execute("SELECT version FROM schema_version")
-            version = self.cursor.fetchone()
-            if not version or version[0] != SCHEMA_VERSION:
+            current_version_row = self.cursor.fetchone()
+            current_db_version = current_version_row[0] if current_version_row else None
+            if str(current_db_version) != str(SCHEMA_VERSION):
                 logger.warning(
-                    f"Database schema version mismatch or missing. Expected '{SCHEMA_VERSION}', found '{version[0] if version else 'None'}'. May cause issues."
+                    f"Database schema version mismatch. Expected '{SCHEMA_VERSION}', found '{current_db_version}'. May cause issues."
                 )
                 # TODO: Implement schema migration logic if needed
+            # else:
+            #    logger.debug(f"Database schema version '{SCHEMA_VERSION}' matches.")
 
         except sqlite3.Error as e:
             logger.error(f"Database initialization error: {e}")
@@ -258,11 +275,72 @@ class LogDb:
             logger.debug(
                 f"Logged result for task {result.task_id}, attempt {attempt_number}, status {status}"
             )
+
+            # Persist detailed energies only for successful tasks
+            if status == "COMPLETED":
+                energies_json = json.dumps(getattr(result, "energies", {}))
+                self.cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO results (run_id, task_id, energies_json)
+                    VALUES (?, ?, ?)
+                    """,
+                    (run_id, result.task_id, energies_json),
+                )
+                logger.debug(
+                    f"Persisted energies for successful task {result.task_id} in run {run_id}"
+                )
+
         except sqlite3.Error as e:
             logger.error(f"Failed to log task {result.task_id} result to database: {e}")
 
     # Alias for backward compatibility
     log_task_result = log_task_attempt
+
+    def fetch_results(self, run_id: str) -> dict[str, dict]:
+        """Return {task_id: energies_dict} for a given run."""
+        if not self.conn or not self.cursor:
+            logger.error("Database not connected, cannot fetch results.")
+            return {}
+        try:
+            with self._connect() as conn:  # Ensure using a valid connection context
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT task_id, energies_json FROM results WHERE run_id = ?",
+                    (run_id,),
+                )
+                # Ensure energies_json is not None before trying to load
+                return {
+                    tid: json.loads(ej) if ej is not None else {} for tid, ej in cursor.fetchall()
+                }
+        except sqlite3.Error as e:
+            logger.error(f"Failed to fetch results for run_id {run_id}: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse energies_json for run_id {run_id}: {e}")
+            # Potentially return partial results or handle more gracefully
+            return {}
+
+    def _connect(self) -> sqlite3.Connection:  # Added type hint for clarity
+        """Ensures a valid connection is returned, typically self.conn.
+
+        This is a simplified version. A more robust one might re-establish
+        connection if self.conn is None or closed.
+        """
+        if self.conn is None:
+            # This case should ideally be handled by __init__ or a dedicated connect method
+            # For now, let's assume if _connect is called, __init__ should have established conn
+            # Or, we could try to re-establish:
+            # self._connect_and_initialize()
+            # if self.conn is None:
+            #     raise sqlite3.OperationalError("Failed to establish database connection.")
+            logger.warning(
+                "Attempting to use _connect when self.conn is None. This might indicate an issue."
+            )
+            # For the fetch_results, we'll rely on the connection established by __init__
+            # This placeholder _connect might need more robust logic if used more broadly.
+            # Re-raising to make it clear that connection should exist
+            raise sqlite3.OperationalError("Database connection is not available.")
+        return self.conn
 
     def close(self):
         """Commit changes and close the database connection."""
