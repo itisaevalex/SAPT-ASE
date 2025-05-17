@@ -392,7 +392,7 @@ class LogDb:
                 (
                     monomer_a_xyz,
                     monomer_b_xyz,
-                    basis_set, # Compare against effective basis
+                    basis_set,  # Compare against effective basis
                     method,
                     TaskStatus.COMPLETED.name,
                 ),
@@ -421,14 +421,14 @@ class LogDb:
                     task_id=task_id,
                     success=True,
                     energies=energies,
-                    basis_set=basis_set, # The requested basis
-                    actual_basis_set=actual_basis_set or basis_set, # Store what was used
+                    basis_set=basis_set,  # The requested basis
+                    actual_basis_set=actual_basis_set or basis_set,  # Store what was used
                     method=method,
                     elapsed_time=elapsed_time if elapsed_time is not None else -1.0,
                     attempt_number=attempt_number if attempt_number is not None else 0,
-                    error_message=None, # Success means no error message
-                    error_code=None,    # Success means no error code
-                    error_details=error_details, # Might contain prior attempt history
+                    error_message=None,  # Success means no error message
+                    error_code=None,  # Success means no error code
+                    error_details=error_details,  # Might contain prior attempt history
                     # The following are not directly stored in this query context but result expects them
                     monomer_a_xyz=monomer_a_xyz,
                     monomer_b_xyz=monomer_b_xyz,
@@ -436,7 +436,9 @@ class LogDb:
                 )
                 # Add run_id as an extra attribute if needed, not a SaptResult field
                 # setattr(cached_sapt_result, 'run_id_cached_from', run_id)
-                logger.debug(f"Cache hit for task defined by m_a, m_b, {basis_set}, {method}. Found task_id: {task_id} from run_id: {run_id}")
+                logger.debug(
+                    f"Cache hit for task defined by m_a, m_b, {basis_set}, {method}. Found task_id: {task_id} from run_id: {run_id}"
+                )
                 return cached_sapt_result
             else:
                 logger.debug(f"Cache miss for task defined by m_a, m_b, {basis_set}, {method}.")
@@ -452,16 +454,16 @@ class LogDb:
             logger.error("Database not connected, cannot fetch results.")
             return {}
         try:
-            with self._connect() as conn:  # Ensure using a valid connection context
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT task_id, energies_json FROM results WHERE run_id = ?",
-                    (run_id,),
-                )
-                # Ensure energies_json is not None before trying to load
-                return {
-                    tid: json.loads(ej) if ej is not None else {} for tid, ej in cursor.fetchall()
-                }
+            conn = self._connect()  # Reuse the existing connection
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT task_id, energies_json FROM results WHERE run_id = ?",
+                (run_id,),
+            )
+            # Ensure energies_json is not None before trying to load
+            return {
+                tid: json.loads(ej) if ej is not None else {} for tid, ej in cursor.fetchall()
+            }
         except sqlite3.Error as e:
             logger.error(f"Failed to fetch results for run_id {run_id}: {e}")
             return {}

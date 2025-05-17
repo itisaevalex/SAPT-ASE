@@ -1,11 +1,8 @@
 import pytest
-from pathlib import Path
-import numpy as np
-
-from saptase.core.models import Molecule, SaptResult, SaptTask
-from saptase.core.orchestrator import SaptWorkflow, get_default_backend
 from saptase.core.backend import SuccessMockBackend
 from saptase.core.logdb import LogDb
+from saptase.core.models import Molecule
+from saptase.core.orchestrator import SaptWorkflow
 
 # Define simple monomers for testing
 monomer_a_xyz_str = "1\nHelium A\nHe 0.0 0.0 0.0"
@@ -13,6 +10,7 @@ monomer_b_xyz_str = "1\nHelium B\nHe 1.0 0.0 0.0"
 
 mol_a = Molecule.from_xyz_string(monomer_a_xyz_str)
 mol_b = Molecule.from_xyz_string(monomer_b_xyz_str)
+
 
 @pytest.mark.fast
 def test_cache_skip_with_mock_backend(tmp_path):
@@ -25,12 +23,12 @@ def test_cache_skip_with_mock_backend(tmp_path):
     # This typically happens if CI_FAST is set, or if we patch it.
     # For simplicity, we'll assume CI_FAST or similar mechanism makes it use SuccessMockBackend.
     # Alternatively, explicitly pass SuccessMockBackend().
-    backend_to_use = SuccessMockBackend() # Explicitly use the mock backend
+    backend_to_use = SuccessMockBackend()  # Explicitly use the mock backend
 
     # --- First run (fills cache) ---
     wf1 = SaptWorkflow(backend=backend_to_use, db_path=db_path)
-    task1 = wf1.add_dimer(mol_a, mol_b, task_id="t1_cache_test", basis_set="jun-cc-pvdz", method="sapt0")
-    
+    wf1.add_dimer(mol_a, mol_b, task_id="t1_cache_test", basis_set="jun-cc-pvdz", method="sapt0")
+
     # Manually set monomer_xyz in task_result for mock backend as it doesn't run full orchestrator worker logic
     # In a real run, _execute_task_for_parallel populates these on SaptResult before logging.
     # For SuccessMockBackend, we need to ensure these are on the SaptResult that LogDB gets.
@@ -46,7 +44,7 @@ def test_cache_skip_with_mock_backend(tmp_path):
     assert "t1_cache_test" in results1
     res1 = results1["t1_cache_test"]
     assert res1.success
-    assert not getattr(res1, 'from_cache', False), "First run should not be from cache"
+    assert not getattr(res1, "from_cache", False), "First run should not be from cache"
 
     # Verify that the result was actually cached by querying LogDb directly (optional check)
     logdb_check = LogDb(db_path)
@@ -54,23 +52,23 @@ def test_cache_skip_with_mock_backend(tmp_path):
         monomer_a_xyz=mol_a.to_xyz_string(),
         monomer_b_xyz=mol_b.to_xyz_string(),
         basis_set="jun-cc-pvdz",
-        method="sapt0"
+        method="sapt0",
     )
     logdb_check.close()
     assert cached_check is not None, "Result should be in cache after first run"
-    assert cached_check.task_id == "t1_cache_test" # The SaptResult from cache has original task_id
+    assert cached_check.task_id == "t1_cache_test"  # The SaptResult from cache has original task_id
 
     # --- Second identical run (should skip) ---
     # For the second run, the orchestrator should find the result from wf1 in the cache.
     wf2 = SaptWorkflow(backend=backend_to_use, db_path=db_path)
-    task2 = wf2.add_dimer(mol_a, mol_b, task_id="t2_cache_test", basis_set="jun-cc-pvdz", method="sapt0")
+    wf2.add_dimer(mol_a, mol_b, task_id="t2_cache_test", basis_set="jun-cc-pvdz", method="sapt0")
     results2 = wf2.run_local_parallel(max_workers=1)
 
     assert "t2_cache_test" in results2
     res2 = results2["t2_cache_test"]
     assert res2.success, f"Second run failed: {res2.error_message}"
-    assert getattr(res2, 'from_cache', False), "Second run should be from cache"
-    
+    assert getattr(res2, "from_cache", False), "Second run should be from cache"
+
     # The task_id of the result returned by the orchestrator for t2_cache_test should be t2_cache_test.
     # The underlying SaptResult object (if from_json worked) might have the original task_id
     # from when it was cached ('t1_cache_test'). This depends on how SaptResult.from_json handles fields.
@@ -79,7 +77,7 @@ def test_cache_skip_with_mock_backend(tmp_path):
     # SaptResult to match the current task's ID if they differ, or ensure the comparison is okay.
     # For now, let's assume the orchestrator returns a result associated with 't2_cache_test'.
     # The critical part is that from_cache is True.
-    assert res2.task_id == "t2_cache_test" # This is what run_local_parallel keys on.
-    
+    assert res2.task_id == "t2_cache_test"  # This is what run_local_parallel keys on.
+
     # If res2 is from cache, its energies should match res1's (or the cached_check's)
-    assert res2.energies == res1.energies 
+    assert res2.energies == res1.energies
