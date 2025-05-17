@@ -461,9 +461,7 @@ class LogDb:
                 (run_id,),
             )
             # Ensure energies_json is not None before trying to load
-            return {
-                tid: json.loads(ej) if ej is not None else {} for tid, ej in cursor.fetchall()
-            }
+            return {tid: json.loads(ej) if ej is not None else {} for tid, ej in cursor.fetchall()}
         except sqlite3.Error as e:
             logger.error(f"Failed to fetch results for run_id {run_id}: {e}")
             return {}
