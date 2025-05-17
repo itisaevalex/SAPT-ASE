@@ -7,6 +7,12 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Added `--db-path` option to `saptase run` command to specify a custom database path for the workflow.
+- Added `--max-workers-big-basis` (experimental) option to `saptase run` to limit worker processes for tasks identified with large basis sets.
+- Introduced `saptase db` subcommand group for database management:
+    - `saptase db vacuum [--db-path <PATH>]`: Vacuums the specified SQLite database to reclaim space and improve performance.
+    - `saptase db delete-failed [--db-path <PATH>]`: Deletes all tasks marked with "FAILED" status (and their corresponding results) from the database.
+    - `saptase db deduplicate [--db-path <PATH>] [--overwrite]`: Removes duplicate task entries from the database, keeping either the oldest (default) or newest (`--overwrite`) successful record.
 - Added `psi4` pytest marker and applied it to tests requiring a real Psi4 installation.
 - Created Conda environment file (`environment-ci.yml`) for CI `real` mode.
 - Added documentation (`docs/ci_psi4.md`) explaining the Psi4 CI setup and local replication.

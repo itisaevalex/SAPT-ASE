@@ -5,6 +5,7 @@ Implements the adaptive basis set escalation workflow.
 
 import logging
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from saptase.core.backend import get_backend  # Import the factory
@@ -33,6 +34,7 @@ class AdaptiveWorkflow(SaptWorkflow):
         backend_name: str = "psi4",
         backend_options: Optional[Dict[str, Any]] = None,
         adaptive_options: Optional[Dict[str, Any]] = None,
+        db_path: Optional[str] = None,
     ):
         """
         Initialize the adaptive workflow.
@@ -45,6 +47,7 @@ class AdaptiveWorkflow(SaptWorkflow):
             backend_options: Dictionary of options for the backend.
             adaptive_options: Dictionary of options controlling the adaptive behavior.
                               Expected keys: 'target_accuracy' (dict), 'max_rung' (int).
+            db_path: Optional path to the database file.
         """
         backend_options = backend_options or {}
         adaptive_options = adaptive_options or {}
@@ -57,7 +60,13 @@ class AdaptiveWorkflow(SaptWorkflow):
             raise  # Re-raise the error to halt execution
 
         # 2. Initialize the base class correctly using keyword arguments
-        super().__init__(tasks=tasks, backend=backend_instance)
+        # Ensure db_path is converted to Path if provided, or defaults handled by SaptWorkflow
+        if db_path:
+            super().__init__(tasks=tasks, backend=backend_instance, db_path=Path(db_path))
+        else:
+            super().__init__(
+                tasks=tasks, backend=backend_instance
+            )  # Let SaptWorkflow handle its default db_path
 
         # --- Now initialize AdaptiveWorkflow specific attributes ---
         self.adaptive_options = adaptive_options

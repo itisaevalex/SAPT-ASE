@@ -98,6 +98,10 @@ def run_adaptive_command(args: argparse.Namespace):
         print(f"Error loading or parsing configuration file: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Determine db_path
+    db_path = _get_db_path(args, config)
+    logger.info(f"Using database path: {db_path}")
+
     # Extract options
     adaptive_options = config.get("adaptive", {})
     execution_config = config.get("execution", {})
@@ -161,6 +165,7 @@ def run_adaptive_command(args: argparse.Namespace):
             backend_options=backend_options,
             adaptive_options=adaptive_options,
             max_workers=workers,  # Use merged workers value
+            db_path=db_path,  # Pass determined db_path
         )
     except Exception as e:
         print(f"\nError during adaptive workflow execution: {e}", file=sys.stderr)
@@ -217,6 +222,10 @@ def run_command(args: argparse.Namespace):
     except Exception as e:
         logger.error(f"Error loading or parsing configuration file: {e}")
         sys.exit(1)
+
+    # Determine db_path (used by SaptWorkflow)
+    db_path = _get_db_path(args, config)
+    logger.info(f"Using database for workflow: {db_path}")
 
     # --- Configuration Merging ---
     execution_config = config.get("execution", {})
@@ -284,14 +293,14 @@ def run_command(args: argparse.Namespace):
         from .core.backend import get_backend  # Ensure get_backend is imported
 
         selected_backend = get_backend(backend_name, options=backend_options)
-        workflow = SaptWorkflow(backend=selected_backend)
+        workflow = SaptWorkflow(backend=selected_backend, db_path=db_path)
         logger.info(f"Successfully initialized SaptWorkflow with backend: {backend_name}")
     except Exception as e:
         logger.error(
             f"Failed to initialize SaptWorkflow with backend '{backend_name}': {e}. "
             f"Falling back to default SaptWorkflow initialization."
         )
-        workflow = SaptWorkflow()  # Fallback to default behavior
+        workflow = SaptWorkflow(db_path=db_path)
 
     config_tasks = config.get("tasks", [])
     if not config_tasks:
@@ -336,7 +345,7 @@ def run_command(args: argparse.Namespace):
     logger.info(f"Executing workflow with mode: {mode}")
     results: Optional[Dict[str, SaptResult]] = None
     try:
-        if mode == "local_serial":
+        if mode == "serial":
             results = workflow.run_local_serial()
         elif mode == "local_parallel":
             results = workflow.run_local_parallel(max_workers=workers)
@@ -466,6 +475,28 @@ def db_delete_failed_command(args: argparse.Namespace):
         logdb.close()
 
 
+def db_vacuum_command(args: argparse.Namespace):
+    """Handles the 'db vacuum' subcommand to rebuild and shrink the database."""
+    db_path = _get_db_path(args)
+    logger.info(f"Attempting to VACUUM database: {db_path}")
+    # LogDb class manages connection opening/closing, but VACUUM is special.
+    # It's safer to manage connection directly here for this command.
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        logger.info("Connection opened. Executing VACUUM...")
+        conn.execute("VACUUM")
+        conn.commit()
+        logger.info(f"Database {db_path} successfully vacuumed and committed.")
+    except sqlite3.Error as e:
+        logger.error(f"Error during VACUUM operation on {db_path}: {e}", exc_info=True)
+        # No rollback needed for VACUUM typically, but good practice if other ops were involved.
+    finally:
+        if conn:
+            conn.close()
+            logger.info(f"Connection to {db_path} closed.")
+
+
 def main(argv: Optional[List[str]] = None):
     """
     Main entry point for the SAPTASE CLI.
@@ -569,6 +600,12 @@ def main(argv: Optional[List[str]] = None):
         help="Keep scratch directories after calculations (overrides config file).",
     )
     parser_run.add_argument(
+        "--db-path",
+        type=str,
+        default=None,
+        help="Path to the SQLite database file (e.g., runs/runs.sqlite). Overrides config file or default.",
+    )
+    parser_run.add_argument(
         "--max-workers-big-basis",
         type=int,
         default=None,
@@ -629,6 +666,18 @@ def main(argv: Optional[List[str]] = None):
         help="If set, keeps the newest entry among duplicates instead of the oldest.",
     )
     db_deduplicate_parser.set_defaults(func=db_deduplicate_command)
+
+    # --- 'db vacuum' subcommand ---
+    db_vacuum_parser = db_subparsers.add_parser(
+        "vacuum", help="Rebuild and shrink the SQLite database file."
+    )
+    db_vacuum_parser.add_argument(
+        "--db-path",
+        type=str,
+        help="Path to the SQLite database file to vacuum. If not provided, tries to infer or use default.",
+        default=None,
+    )
+    db_vacuum_parser.set_defaults(func=db_vacuum_command)
 
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands

@@ -297,7 +297,7 @@ def test_run_adaptive_start_from_higher_rung():
 # --- Integration-Style Test using Convenience Function ---
 
 
-def test_integration_adaptive_workflow(monkeypatch):
+def test_integration_adaptive_workflow(monkeypatch, tmp_path):
     """Integration test using run_adaptive_workflow and mock backend."""
     # Mock results simulating convergence at rung 2 (jun-cc-pvtz)
     mock_energies = {
@@ -330,7 +330,9 @@ def test_integration_adaptive_workflow(monkeypatch):
     results = run_adaptive_workflow(
         tasks=[start_task],
         backend_name="mock",  # This will trigger the use of orchestrator.MockBackend
+        backend_options={},  # Add missing backend_options
         adaptive_options=adaptive_options,
+        db_path=str(tmp_path / "adaptive_integration.sqlite"),  # Ensure db_path is also passed
     )
 
     # Assertions:

@@ -149,13 +149,35 @@ The `saptase` CLI is useful for running predefined task collections from a YAML 
 ```bash
 # Example: run tasks defined in job.yml using a local Dask cluster with 4 workers
 # Scratch files go into /tmp/saptase_scratch and are kept after completion.
+# Results are stored in a database named my_workflow.sqlite in the current directory.
 export SAPTASE_SCRATCH_ROOT=/tmp/saptase_scratch
-saptase run job.yml --mode dask --workers 4 --keep-scratch
+saptase run job.yml --mode dask --workers 4 --keep-scratch --db-path my_workflow.sqlite
 
 # Example: Submit to an existing Dask scheduler
 # saptase run job.yml --mode dask --scheduler tcp://your-scheduler-address:8786
+
+# Example: Limit workers for tasks with large basis sets (experimental)
+# saptase run job.yml --mode local_parallel --max-workers-big-basis 2
 ```
 An example `job.yml` can be found in the `examples/` directory.
+
+The CLI also provides database management utilities under the `db` subcommand:
+```bash
+# Vacuum the default database (runs/saptase_provenance.sqlite)
+saptase db vacuum
+
+# Vacuum a specific database
+saptase db vacuum --db-path my_workflow.sqlite
+
+# Delete failed tasks from a specific database
+saptase db delete-failed --db-path my_workflow.sqlite
+
+# Deduplicate tasks in a specific database (keeps oldest successful by default)
+saptase db deduplicate --db-path my_workflow.sqlite
+
+# Deduplicate tasks, keeping the newest successful record if duplicates are found
+saptase db deduplicate --db-path my_workflow.sqlite --overwrite
+```
 
 #### b) Programmatic Dask Execution (e.g., with SLURM)
 

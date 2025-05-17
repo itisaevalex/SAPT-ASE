@@ -13,18 +13,21 @@ import time  # For timing
 import uuid  # For run IDs
 from dataclasses import dataclass, field
 from pathlib import Path  # Added Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from tqdm import tqdm
 
 from saptase.config import EXECUTION  # scratch defaults
 from saptase.core.scratch import TaskScratch  # Import TaskScratch
+from saptase.execution import DaskExecutor  # Corrected import for DaskExecutor
 from saptase.recovery.escalate import EscalationContext  # Import recovery context
 
 from .backend import Psi4Backend, SaptBackend
 from .errors import SaptError  # Import base SaptError and BasisIncompatible
 from .logdb import LogDb  # Import LogDb
 from .models import Molecule, SaptResult, SaptTask, TaskStatus
+
+# from saptase.workflows.adaptive import AdaptiveWorkflow # Import AdaptiveWorkflow <-- Moved
 
 logger = logging.getLogger(__name__)
 
@@ -892,58 +895,58 @@ def run_sapt(
 # New convenience function for adaptive workflow
 def run_adaptive_workflow(
     tasks: List[SaptTask],
-    backend_name: str = "psi4",
-    backend_options: Optional[Dict[str, Any]] = None,
-    adaptive_options: Optional[Dict[str, Any]] = None,
-    max_workers: Optional[int] = None,
+    backend_name: str,
+    backend_options: dict,
+    adaptive_options: dict,
+    max_workers: Optional[int] = None,  # Added for consistency, passed to run_adaptive
+    db_path: Optional[str] = None,
 ) -> Dict[str, SaptResult]:
-    """
-    Convenience function to instantiate and run an AdaptiveWorkflow.
+    """Main logic for the adaptive workflow.
 
     Args:
-        tasks: List of SaptTask objects (typically one for adaptive mode).
-               The basis set in the task determines the starting point.
-        backend_name: Name of the computational backend.
+        tasks: List of SaptTask objects (usually one for adaptive mode).
+        backend_name: Name of the calculation backend.
         backend_options: Options for the backend.
-        adaptive_options: Options for the adaptive workflow (e.g., 'target_accuracy').
-        max_workers: Maximum number of workers for parallel execution within rungs.
+        adaptive_options: Options specific to the adaptive strategy.
+        max_workers: Max number of parallel workers for the adaptive steps (if backend supports).
+        db_path: Optional path to the database file.
 
     Returns:
-        Dictionary mapping the primary task ID to the final converged SaptResult,
-        or all results if the run fails early.
+        A dictionary mapping task IDs to their SaptResult.
     """
-    from saptase.workflows.adaptive import AdaptiveWorkflow
+    from saptase.workflows.adaptive import AdaptiveWorkflow  # <-- Moved here
 
-    adaptive_workflow = AdaptiveWorkflow(
+    if not tasks:
+        logger.warning("Adaptive workflow called with no tasks.")
+        return {}
+
+    # The first task in the list is typically the primary one for adaptive workflows.
+    logger.info(f"Initializing adaptive workflow for primary task: {tasks[0].id}")
+
+    # Instantiate AdaptiveWorkflow
+    adaptive_workflow_instance = AdaptiveWorkflow(
         tasks=tasks,
         backend_name=backend_name,
         backend_options=backend_options,
         adaptive_options=adaptive_options,
+        db_path=db_path,
     )
-    results = adaptive_workflow.run_adaptive(max_workers=max_workers)
+
+    # Run the adaptive process
+    # The max_workers argument is passed to the run_adaptive method,
+    # which might use it if its internal execution (e.g., run_local_serial for each rung)
+    # is ever parallelized, or if the backend itself can use it.
+    results = adaptive_workflow_instance.run_adaptive(max_workers=max_workers)
+
     return results
 
 
-# -----------------------------------------------------------------------------
-# *Testing* helper – minimal backend so that tests can monkey-patch it.
-# -----------------------------------------------------------------------------
+# Placeholder for tests that might patch it here
 class MockBackend(SaptBackend):
-    """Extremely thin backend used solely by the test-suite.
-
-    The real behaviour is provided by `monkeypatch` in ``tests/test_adaptive.py``
-    et al.  We just need a placeholder so that
-
-    ``monkeypatch.setattr('saptase.core.orchestrator.MockBackend', ...)``
-
-    works without raising *AttributeError* at import-time.
-    """
-
     def calculate(self, task: SaptTask) -> SaptResult:
-        result = SaptResult(task_id=task.id)
-        result.success = False
-        result.error_message = (
-            "MockBackend placeholder was called unexpectedly - tests are supposed"
-            " to patch this with a fully-featured implementation."
+        # This is a placeholder, tests should provide the actual mock implementation
+        # if they rely on saptase.core.orchestrator.MockBackend
+        logger.warning("Placeholder MockBackend in orchestrator was called directly!")
+        return SaptResult(
+            task_id=task.id, success=False, error_message="Placeholder MockBackend called"
         )
-        task.status = TaskStatus.FAILED
-        return result

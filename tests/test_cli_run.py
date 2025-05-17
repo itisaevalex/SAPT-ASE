@@ -4,7 +4,9 @@
 import os
 import sqlite3
 import subprocess
+import sys  # Import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -95,3 +97,83 @@ def test_cli_run_local_dask_success(tmp_path):
     assert any(
         d.name.startswith("h_dimer_2") for d in scratch_contents
     ), f"h_dimer_2 scratch missing in {saptase_scratch_dir}"
+
+
+@patch.dict(sys.modules, {"basis_set_exchange": MagicMock()})
+@patch("saptase.cli.SaptWorkflow")
+@patch("saptase.cli.load_config")
+@patch("saptase.core.backend.get_backend")
+@patch("saptase.hooks.basis_bootstrap.ensure_bases")
+# @patch('saptase.hooks.basis_bootstrap.bse', MagicMock()) # This might no longer be needed or could be kept
+def test_cli_run_db_path_propagation(
+    mock_ensure_bases, mock_get_backend, mock_load_config, MockSaptWorkflow, tmp_path
+):
+    """Test that --db-path is correctly passed to SaptWorkflow via `saptase run`."""
+    # Arrange
+    custom_db_name = "custom_workflow.sqlite"
+    custom_db_path = tmp_path / custom_db_name
+    dummy_yaml_path = tmp_path / "dummy_sweep.yml"
+    dummy_yaml_path.touch()  # Create a dummy yaml file
+
+    # Mock load_config to return a minimal valid config structure
+    mock_load_config.return_value = {
+        "execution": {"backend": "psi4"},  # Minimal for backend selection
+        "tasks": [
+            {
+                "id": "task1",
+                "monomer_a": {"symbols": ["H"], "coordinates": [[0, 0, 0]]},
+                "monomer_b": {"symbols": ["H"], "coordinates": [[0, 0, 1]]},
+            }
+        ],  # Need at least one task
+    }
+
+    # Mock SaptWorkflow instance to check calls to its methods (if needed later)
+    mock_workflow_instance = MagicMock()
+    MockSaptWorkflow.return_value = mock_workflow_instance
+    # Mock methods of the instance if run_local_serial etc. are called and need specific returns
+    mock_workflow_instance.run_local_serial.return_value = {}  # Example
+
+    # Mock get_backend to return a MagicMock backend instance
+    mock_backend_instance = MagicMock()
+    mock_get_backend.return_value = mock_backend_instance
+
+    # Act
+    # Directly call the main function of the CLI module with arguments
+    from saptase.cli import main as saptase_main
+
+    saptase_main(
+        [
+            "run",
+            str(dummy_yaml_path),
+            "--db-path",
+            str(custom_db_path),
+            "--mode",
+            "serial",  # Changed from "local_serial"
+        ]
+    )
+
+    # Assert
+    # Check that SaptWorkflow was instantiated with the correct db_path
+    MockSaptWorkflow.assert_called_once()
+    # The SaptWorkflow is called with backend and db_path as keyword arguments
+    # or positional if the signature implies. Based on SaptWorkflow.__init__,
+    # backend is positional or keyword, db_path is keyword.
+
+    # Get the actual call arguments
+    actual_call_args = MockSaptWorkflow.call_args
+    # print(f"SAPTWORKFLOW_CALL_ARGS: {actual_call_args}") # Changed print content for clarity
+    # print(f"SAPTWORKFLOW_MOCK_CALLS: {MockSaptWorkflow.mock_calls}") # Add this print
+
+    # Expected: SaptWorkflow(backend=mock_backend_instance, db_path=Path(custom_db_path))
+    assert actual_call_args is not None, "SaptWorkflow was not called"
+
+    # Check keyword arguments specifically for db_path
+    assert "db_path" in actual_call_args.kwargs, "db_path not in SaptWorkflow kwargs"
+    assert Path(actual_call_args.kwargs["db_path"]) == Path(
+        custom_db_path
+    ), f"SaptWorkflow not called with correct db_path. Expected {custom_db_path}, got {actual_call_args.kwargs['db_path']}"
+
+    # Ensure the mock_load_config was called with the dummy yaml path
+    mock_load_config.assert_called_once_with(str(dummy_yaml_path))
+    # Ensure the workflow execution method was called (example for local_serial)
+    mock_workflow_instance.run_local_serial.assert_called_once()
