@@ -50,6 +50,24 @@ def main():
     p.add_argument("--monomer-b-charge", type=int, default=0)
     p.add_argument("--monomer-b-mult", type=int, default=1)
     p.add_argument("--method", default="sapt0", help="SAPT method to use.")
+    p.add_argument(
+        "--total-chunks",
+        type=int,
+        default=1,
+        help="Total number of chunks to divide the tasks into. Default is 1 (no chunking).",
+    )
+    p.add_argument(
+        "--chunk-index",
+        type=int,
+        default=0,
+        help="0-based index of the current chunk to generate. Default is 0.",
+    )
+    p.add_argument(
+        "--master-db-path",
+        type=pathlib.Path,
+        default=None,
+        help="Optional path to a master SQLite database. If provided, tasks already completed in this DB will be skipped.",
+    )
 
     args = p.parse_args()
 
@@ -107,20 +125,87 @@ def main():
                 }
             )
 
+    # --- Potentially filter tasks based on master_db_path ---
+    if args.master_db_path and args.master_db_path.exists():
+        print(f"Querying master database: {args.master_db_path} to filter completed tasks...")
+        try:
+            # This requires saptase to be importable in the environment where this script runs
+            from saptase.core.logdb import LogDb
+
+            logdb = LogDb(args.master_db_path)
+            uncompleted_tasks = []
+            completed_count = 0
+            for task_def in tasks:
+                # Reconstruct necessary info for get_cached_result
+                # This assumes file paths are sufficient and LogDb can handle them
+                # or that we'd need to load XYZ content here if LogDb requires full Molecule string.
+                # For now, assuming LogDb's get_cached_result can work with what's available or
+                # that it's robust to partial info if it's just checking by task_id components.
+
+                # To properly check cache, we need the XYZ content.
+                mon_a_xyz = pathlib.Path(task_def["monomer_a"]["file"]).read_text()
+                mon_b_xyz = pathlib.Path(task_def["monomer_b"]["file"]).read_text()
+
+                cached_result = logdb.get_cached_result(
+                    monomer_a_xyz=mon_a_xyz,
+                    monomer_b_xyz=mon_b_xyz,
+                    basis_set=task_def["basis_set"],
+                    method=task_def["method"],
+                )
+                if cached_result and cached_result.success:
+                    # print(f"Task {task_def['id']} found as completed in master DB. Skipping.")
+                    completed_count += 1
+                else:
+                    uncompleted_tasks.append(task_def)
+
+            if completed_count > 0:
+                print(
+                    f"Skipped {completed_count} tasks found as completed in {args.master_db_path}."
+                )
+            tasks = uncompleted_tasks  # Update tasks to only those not completed
+            logdb.close()
+
+        except ImportError:
+            print(
+                "Warning: Could not import saptase.core.logdb. Skipping filtering based on master_db_path. Ensure saptase is in PYTHONPATH."
+            )
+        except Exception as e:
+            print(
+                f"Warning: Error during database query for task filtering: {e}. Proceeding without filtering."
+            )
+
+    # --- Chunking logic ---
+    tasks_for_this_chunk = []
+    if args.total_chunks > 1:
+        if not (0 <= args.chunk_index < args.total_chunks):
+            raise ValueError(
+                f"chunk_index ({args.chunk_index}) must be between 0 and total_chunks-1 ({args.total_chunks - 1})."
+            )
+
+        num_total_tasks = len(tasks)
+        chunk_size = (num_total_tasks + args.total_chunks - 1) // args.total_chunks
+        start_index = args.chunk_index * chunk_size
+        end_index = min((args.chunk_index + 1) * chunk_size, num_total_tasks)
+
+        tasks_for_this_chunk = tasks[start_index:end_index]
+        print(
+            f"Selected chunk {args.chunk_index + 1}/{args.total_chunks}: Tasks {start_index + 1}-{end_index} of {num_total_tasks} total (after potential DB filter)."
+        )
+    else:
+        tasks_for_this_chunk = tasks  # No chunking, use all (filtered) tasks
+        print(f"No chunking requested. Using all {len(tasks)} tasks (after potential DB filter).")
+
     # Structure matches SAPTASE expected input YAML format
     job_config = {
         "execution": {"mode": "local_parallel"},  # This is informational, mode is set by CLI
-        "tasks": tasks,
+        "tasks": tasks_for_this_chunk,  # Use the selected chunk
     }
 
     try:
         # Use safe_dump for better YAML practices
         yaml_output = yaml.safe_dump(job_config, sort_keys=False)
         args.out.write_text(yaml_output)
-        print(
-            f"Generated {len(tasks)} tasks "
-            f"({num_pairs} dimers x {len(bases)} bases) to {args.out}"
-        )
+        print(f"Generated {len(tasks_for_this_chunk)} tasks to {args.out}")
     except Exception as e:
         print(f"Error writing YAML file {args.out}: {e}")
         # Decide if you want to sys.exit(1) here
@@ -129,6 +214,7 @@ def main():
 if __name__ == "__main__":
     # Added basic import error handling for PyYAML
     try:
+        import pathlib  # Ensure pathlib is imported for type hints if not already top-level for script logic
         import textwrap  # Ensure textwrap is imported here as well
 
         import yaml

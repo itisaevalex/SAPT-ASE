@@ -1,0 +1,729 @@
+execution:
+  mode: local_parallel
+tasks:
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 01_2_pyridoxine_2_aminopyridine_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\01_2_pyridoxine_2_aminopyridine_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 02_adenine_thymine_stack_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\02_adenine_thymine_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\02_adenine_thymine_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 03_adenine_thymine_watsoncrick_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\03_adenine_thymine_watsoncrick_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 04_ammonia_dimer_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\04_ammonia_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\04_ammonia_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 05_benzene_methane_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\05_benzene_methane_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\05_benzene_methane_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 06_benzene_ammonia_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\06_benzene_ammonia_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\06_benzene_ammonia_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 07_benzene_dimer_parallel_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\07_benzene_dimer_parallel_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\07_benzene_dimer_parallel_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 08_benzene_dimer_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\08_benzene_dimer_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\08_benzene_dimer_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 08_benzene_dimer_tshape_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\08_benzene_dimer_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\08_benzene_dimer_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 08_benzene_dimer_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\08_benzene_dimer_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\08_benzene_dimer_tshape_b.xyz
+    charge: 0
+    multiplicity: 1

@@ -1,0 +1,729 @@
+execution:
+  mode: local_parallel
+tasks:
+- id: 15_indole_benzene_stack_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\15_indole_benzene_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\15_indole_benzene_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 15_indole_benzene_stack_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\15_indole_benzene_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\15_indole_benzene_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 15_indole_benzene_stack_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\15_indole_benzene_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\15_indole_benzene_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 16_indole_benzene_tshape_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\16_indole_benzene_tshape_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\16_indole_benzene_tshape_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 17_methane_dimer_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\17_methane_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\17_methane_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 18_phenol_dimer_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\18_phenol_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\18_phenol_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 19_pyrazine_dimer_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\19_pyrazine_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\19_pyrazine_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 20_uracil_dimer_hbonded_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\20_uracil_dimer_hbonded_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\20_uracil_dimer_hbonded_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 21_uracil_dimer_stack_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\21_uracil_dimer_stack_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\21_uracil_dimer_stack_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_aug-cc-pVDZ
+  basis_set: aug-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_jun-cc-pVDZ
+  basis_set: jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_aug-cc-pVTZ
+  basis_set: aug-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_jun-cc-pVTZ
+  basis_set: jun-cc-pVTZ
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_def2-SVPD
+  basis_set: def2-SVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_def2-TZVPD
+  basis_set: def2-TZVPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
+- id: 22_water_dimer_def2-TZVPPD
+  basis_set: def2-TZVPPD
+  method: sapt0
+  monomer_a:
+    file: data\s22_split\22_water_dimer_a.xyz
+    charge: 0
+    multiplicity: 1
+  monomer_b:
+    file: data\s22_split\22_water_dimer_b.xyz
+    charge: 0
+    multiplicity: 1
