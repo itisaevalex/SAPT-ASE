@@ -345,6 +345,107 @@ class LogDb:
     # Alias for backward compatibility
     log_task_result = log_task_attempt
 
+    def get_cached_result(
+        self,
+        monomer_a_xyz: str,
+        monomer_b_xyz: str,
+        basis_set: str,
+        method: str,
+    ) -> Optional[SaptResult]:
+        """Check if a successful result for a given task configuration exists in the cache.
+
+        This method primarily checks for a 'COMPLETED' task in 'task_log'
+        that matches the provided defining parameters. If found, it also retrieves
+        the detailed energies from the 'results' table.
+
+        Args:
+            monomer_a_xyz: XYZ string of monomer A.
+            monomer_b_xyz: XYZ string of monomer B.
+            basis_set: The basis set string.
+            method: The calculation method string.
+
+        Returns:
+            A SaptResult object if a cache hit is found, otherwise None.
+        """
+        if not self.conn or not self.cursor:
+            logger.error("Database not connected, cannot get cached result.")
+            return None
+
+        try:
+            self.cursor.execute(
+                """
+                SELECT
+                    tl.task_id, tl.run_id, tl.attempt_number, tl.actual_basis_set,
+                    tl.error_message, tl.error_code, tl.error_details, tl.elapsed_time,
+                    r.energies_json
+                FROM task_log tl
+                LEFT JOIN results r ON tl.run_id = r.run_id AND tl.task_id = r.task_id
+                WHERE
+                    tl.monomer_a_xyz = ? AND
+                    tl.monomer_b_xyz = ? AND
+                    COALESCE(tl.actual_basis_set, tl.basis_set) = ? AND
+                    tl.method = ? AND
+                    tl.status = ?
+                ORDER BY tl.log_id DESC -- Get the most recent if multiple somehow exist
+                LIMIT 1
+                """,
+                (
+                    monomer_a_xyz,
+                    monomer_b_xyz,
+                    basis_set, # Compare against effective basis
+                    method,
+                    TaskStatus.COMPLETED.name,
+                ),
+            )
+            row = self.cursor.fetchone()
+
+            if row:
+                (
+                    task_id,
+                    run_id,
+                    attempt_number,
+                    actual_basis_set,
+                    error_message,
+                    error_code,
+                    error_details_json,
+                    elapsed_time,
+                    energies_json,
+                ) = row
+
+                energies = json.loads(energies_json) if energies_json else None
+                error_details = json.loads(error_details_json) if error_details_json else None
+
+                # Construct SaptResult. Note: Some fields might not be perfectly reconstructed
+                # if they weren't stored or aren't relevant for a cached *successful* result.
+                cached_sapt_result = SaptResult(
+                    task_id=task_id,
+                    success=True,
+                    energies=energies,
+                    basis_set=basis_set, # The requested basis
+                    actual_basis_set=actual_basis_set or basis_set, # Store what was used
+                    method=method,
+                    elapsed_time=elapsed_time if elapsed_time is not None else -1.0,
+                    attempt_number=attempt_number if attempt_number is not None else 0,
+                    error_message=None, # Success means no error message
+                    error_code=None,    # Success means no error code
+                    error_details=error_details, # Might contain prior attempt history
+                    # The following are not directly stored in this query context but result expects them
+                    monomer_a_xyz=monomer_a_xyz,
+                    monomer_b_xyz=monomer_b_xyz,
+                    # raw_output and timestamp_utc are not part of the direct cache key/value store for this method
+                )
+                # Add run_id as an extra attribute if needed, not a SaptResult field
+                # setattr(cached_sapt_result, 'run_id_cached_from', run_id)
+                logger.debug(f"Cache hit for task defined by m_a, m_b, {basis_set}, {method}. Found task_id: {task_id} from run_id: {run_id}")
+                return cached_sapt_result
+            else:
+                logger.debug(f"Cache miss for task defined by m_a, m_b, {basis_set}, {method}.")
+                return None
+
+        except sqlite3.Error as e:
+            logger.error(f"Database error while fetching cached result: {e}")
+            return None
+
     def fetch_results(self, run_id: str) -> dict[str, dict]:
         """Return {task_id: energies_dict} for a given run."""
         if not self.conn or not self.cursor:

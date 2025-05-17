@@ -529,19 +529,62 @@ class SaptWorkflow:
         logger.info(f"Starting workflow run_id: {self.current_run_id}")
 
         # Filter tasks that need to be run
-        pending_tasks = [task for task in self.tasks if task.status == TaskStatus.PENDING]
+        tasks_to_submit_to_executor = []
+        for task in self.tasks:
+            if task.status == TaskStatus.PENDING:
+                # Check cache before submitting
+                # Ensure monomer XYZ strings are available for cache check
+                # SaptTask should ideally store these directly or have a method
+                monomer_a_xyz = task.monomer_a.to_xyz_string()
+                monomer_b_xyz = task.monomer_b.to_xyz_string()
+                
+                # Use the LogDb instance from the workflow
+                cached_result = self.logdb.get_cached_result(
+                    monomer_a_xyz=monomer_a_xyz,
+                    monomer_b_xyz=monomer_b_xyz,
+                    basis_set=task.basis_set, # Checks effective basis internally
+                    method=task.method
+                )
+                if cached_result:
+                    logger.info(f"Cache hit for task {task.id}. Using cached result from task {cached_result.task_id}.")
+                    # Update the task_id to the current task's ID
+                    # And mark as from_cache
+                    cached_result.task_id = task.id 
+                    cached_result.from_cache = True 
+                    self.results[task.id] = cached_result
+                    task.status = TaskStatus.COMPLETED # Mark original task as completed
+                else:
+                    logger.debug(f"Cache miss for task {task.id}. Submitting for execution.")
+                    tasks_to_submit_to_executor.append(task)
+            elif task.id in self.results: # Already processed (e.g. from a previous segment of a re-run)
+                logger.debug(f"Task {task.id} already has a result, status {task.status}. Skipping.")
+            else: # Not pending and no result, potentially an issue or already handled if status is terminal
+                 logger.debug(f"Task {task.id} is not pending ({task.status}) and not in results. Will not be submitted.")
 
-        if not pending_tasks:
-            print("No pending tasks to run.")
+
+        if not tasks_to_submit_to_executor:
+            print("No new tasks to submit for execution (all might be cached or not pending).")
+            # Ensure LogDb is closed if we exit early
+            if not self.logdb._closed: # Check if already closed by a worker or previous op
+                self.logdb.close()
             return self.results
 
-        print(f"Running {len(pending_tasks)} SAPT tasks on {max_workers} workers...")
+        # Update print message to reflect actual number submitted
+        print(f"Running {len(tasks_to_submit_to_executor)} SAPT tasks on {max_workers} workers (others may be cached)...")
 
         # Map original task ID to task object for logging details
-        task_details = {task.id: task for task in self.tasks}
+        task_details = {task.id: task for task in self.tasks} # Keep all tasks for detail lookup
 
         # Execute tasks using ProcessPoolExecutor
-        results_list = []
+        results_list = [] # This will now only contain results from actual execution
+        
+        # Ensure logdb is open before executor if it was closed above.
+        # This should be handled carefully; workers also open their own LogDb instances.
+        # The workflow's main logdb is primarily for pre-checks and final aggregation/closure.
+        # For simplicity here, assume it's managed correctly or workers handle their needs.
+        # If logdb was closed due to no tasks, and now we have tasks (which shouldn't happen with current logic),
+        # it would need re-opening. But self.logdb is initialized in __post_init__.
+
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=max_workers, mp_context=multiprocessing.get_context("spawn")
         ) as executor:
@@ -550,79 +593,48 @@ class SaptWorkflow:
                 executor.submit(
                     _execute_task_for_parallel,
                     self.backend,
-                    task,
-                    self.logdb.db_path,
+                    task, # task from tasks_to_submit_to_executor
+                    self.logdb.db_path, # Worker uses this to open its own LogDb
                     self.current_run_id,
                 ): task.id
-                for task in pending_tasks
+                for task in tasks_to_submit_to_executor # Only submit non-cached tasks
             }
 
             # Process completed futures as they finish
             for future in tqdm(
-                concurrent.futures.as_completed(future_to_task_id), total=len(pending_tasks)
+                concurrent.futures.as_completed(future_to_task_id), total=len(tasks_to_submit_to_executor)
             ):
                 original_task_id = future_to_task_id[future]
-                original_task = task_details.get(original_task_id)  # Get original task details
-
+                original_task = task_details.get(original_task_id)
                 try:
-                    # Get the result from this specific future (one specific attempt)
-                    result_from_future: SaptResult = future.result()
-
-                    # Each attempt is already logged in the worker process
-                    # We no longer need to log here in the main process
-
-                    logger.debug(
-                        f"Received result for task {result_from_future.task_id} (original: {original_task_id}), success={result_from_future.success}, attempt={getattr(result_from_future, 'attempt_number', 0)}"
-                    )
-
-                    # Determine if this result should become the final result using compact rules
+                    res: SaptResult = future.result()
                     existing = self.results.get(original_task_id)
                     replace = (
                         existing is None
-                        or (result_from_future.success and not existing.success)
+                        or (res.success and not existing.success)
                         or (
-                            not result_from_future.success
+                            not res.success
                             and not existing.success
-                            and result_from_future.attempt_number > existing.attempt_number
+                            # Use attempt_number from result, default to 0 if missing
+                            and getattr(res, "attempt_number", 0)
+                            > getattr(existing, "attempt_number", 0)
                         )
                     )
-
-                    # Log what happened
-                    if existing is None:
-                        logger.debug(
-                            f"No previous result for {original_task_id}, using result from attempt {result_from_future.attempt_number}"
-                        )
-                    elif replace and result_from_future.success:
-                        logger.debug(
-                            f"Updated result for {original_task_id}: new success overrides previous failure"
-                        )
-                    elif replace and not result_from_future.success:
-                        logger.debug(
-                            f"Updated failed result for {original_task_id}: using attempt {result_from_future.attempt_number} instead of {existing.attempt_number}"
-                        )
-                    elif result_from_future.success and existing.success:
-                        logger.debug(
-                            f"Keeping existing success for {original_task_id} (attempt {existing.attempt_number}), ignoring later success from attempt {result_from_future.attempt_number}"
-                        )
-
-                    # Update the final result if needed
                     if replace:
                         # Store in results dictionary with original task ID as key
-                        self.results[original_task_id] = result_from_future
-                        results_list.append(result_from_future)
-
-                        # Update the original task status based on the final result
+                        # Ensure from_cache is False for freshly computed results
+                        res.from_cache = False
+                        self.results[original_task_id] = res
+                        results_list.append(res)
                         if original_task:
                             original_task.status = (
-                                TaskStatus.COMPLETED
-                                if result_from_future.success
-                                else TaskStatus.FAILED
+                                TaskStatus.COMPLETED if res.success else TaskStatus.FAILED
                             )
 
                         # Log the state update
-                        log_msg = f"Task {original_task_id}: final result updated to {result_from_future.task_id}, success={result_from_future.success}"
-                        if hasattr(result_from_future, "attempt_number"):
-                            log_msg += f" (attempt {result_from_future.attempt_number})"
+                        log_msg = f"Task {original_task_id}: final result updated to {res.task_id}, success={res.success}"
+                        if hasattr(res, "attempt_number"):
+                            log_msg += f" (attempt {res.attempt_number})"
                         logger.info(log_msg)
 
                 except Exception as exc:  # Catch rare errors during future.result() retrieval
@@ -639,29 +651,37 @@ class SaptWorkflow:
                         energies=None,  # No energies calculated
                         raw_output=f"Error during result retrieval: {exc}",
                     )
+                    fail_result.from_cache = False # Not from cache if exception during retrieval
                     fail_result.elapsed_time = -1.0  # Indicate unknown task time
                     fail_result.attempt_number = 0  # Set default attempt number
-                    fail_result.error_code = "FutureRetrievalException"
+                    fail_result.error_code = "FutureRetrievalException" # Specific error code for this case
                     fail_result.error_details = json.dumps(
                         [{"error": f"Exception during future.result(): {exc}"}]
                     )
 
                     # Exception during future.result() means the worker didn't complete
                     # We need to log this special case here in the main process
-                    self.logdb.log_task_attempt(run_id=self.current_run_id, result=fail_result)
+                    # Ensure logdb is available before logging attempt
+                    if self.logdb and self.logdb.conn:
+                         self.logdb.log_task_attempt(run_id=self.current_run_id, result=fail_result)
+                    else:
+                        logger.error(
+                            f"Cannot log FutureRetrievalException for {original_task_id} as DB is not available."
+                        )
 
-                    # Only update the final result if no previous result exists
-                    if original_task_id not in self.results:
+                    # Only update the final result if no previous result exists or if current is a failure
+                    if original_task_id not in self.results or not self.results[original_task_id].success:
                         self.results[original_task_id] = fail_result
-                        results_list.append(fail_result)
+                        # results_list.append(fail_result) # Not strictly necessary to append here as it's not from executor
 
                         if original_task:
                             original_task.status = TaskStatus.FAILED
 
-        self.logdb.close()
+        if not self.logdb._closed: # Ensure it's closed at the very end of the run
+            self.logdb.close()
 
         logger.info(
-            f"Parallel execution for run_id {self.current_run_id} finished. Processed {len(results_list)} tasks."
+            f"Parallel execution for run_id {self.current_run_id} finished. Processed {len(tasks_to_submit_to_executor) + (len(pending_tasks) - len(tasks_to_submit_to_executor))} tasks ({len(tasks_to_submit_to_executor)} submitted, {len(pending_tasks) - len(tasks_to_submit_to_executor)} cached)."
         )
         return self.results
 
