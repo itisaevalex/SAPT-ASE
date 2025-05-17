@@ -662,9 +662,8 @@ class LogDb:
                         """
                         DELETE FROM results
                         WHERE run_id = ? AND task_id = ?
-                          AND NOT EXISTS (SELECT 1 FROM task_log tl WHERE tl.run_id = results.run_id AND tl.task_id = results.task_id AND tl.log_id = ?)
                         """,
-                        (run_id_del, task_id_del, log_id_del),
+                        (run_id_del, task_id_del),
                     )
                     if self.cursor.rowcount > 0:
                         logger.debug(
@@ -712,3 +711,61 @@ class LogDb:
             return []  # Return empty list on error
 
         return removed_log_ids_from_task_log
+
+    def delete_failed_tasks(self) -> int:
+        """Delete all tasks from task_log that have a status of 'FAILED'.
+
+        This method also removes corresponding entries from the 'results' table
+        if any exist, although typically failed tasks should not have entries there.
+
+        Returns:
+            The number of failed task log entries deleted.
+        """
+        if not self.conn or not self.cursor:
+            logger.error("Database not connected, cannot delete failed tasks.")
+            return 0
+
+        deleted_task_log_count = 0
+        try:
+            # Fetch run_id and task_id of all failed tasks before deleting them from task_log
+            # This is to ensure we can also clean up the 'results' table if needed.
+            self.cursor.execute(
+                "SELECT run_id, task_id FROM task_log WHERE status = ?",
+                (TaskStatus.FAILED.name,),
+            )
+            failed_tasks_identifiers = self.cursor.fetchall()
+
+            # Delete corresponding entries from the 'results' table
+            # Though log_task_attempt only adds to results on COMPLETED, this is a safeguard.
+            deleted_results_count = 0
+            if failed_tasks_identifiers:
+                for run_id, task_id in failed_tasks_identifiers:
+                    self.cursor.execute(
+                        "DELETE FROM results WHERE run_id = ? AND task_id = ?",
+                        (run_id, task_id),
+                    )
+                    deleted_results_count += self.cursor.rowcount
+                if deleted_results_count > 0:
+                    logger.info(
+                        f"Removed {deleted_results_count} orphaned entries from 'results' table associated with failed tasks."
+                    )
+
+            # Delete failed tasks from task_log
+            self.cursor.execute("DELETE FROM task_log WHERE status = ?", (TaskStatus.FAILED.name,))
+            deleted_task_log_count = self.cursor.rowcount
+            self.conn.commit()
+            if deleted_task_log_count > 0:
+                logger.info(
+                    f"Successfully deleted {deleted_task_log_count} failed task(s) from the database."
+                )
+            else:
+                logger.info("No failed tasks found to delete.")
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting failed tasks: {e}", exc_info=True)
+            if self.conn:
+                try:
+                    self.conn.rollback()
+                except sqlite3.Error as rb_err:
+                    logger.error(f"Rollback failed during failed task deletion: {rb_err}")
+            return 0
+        return deleted_task_log_count

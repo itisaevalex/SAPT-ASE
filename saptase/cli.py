@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os  # For cpu_count
+import sqlite3
 import sys
 from typing import Dict, List, Optional
 
@@ -20,6 +21,20 @@ from .core.models import Molecule, SaptResult, SaptTask
 from .core.orchestrator import SaptWorkflow, run_adaptive_workflow  # Add SaptWorkflow
 
 logger = logging.getLogger(__name__)  # Use module-level logger
+
+
+def _get_db_path(args: argparse.Namespace, config: Optional[dict] = None) -> str:
+    """Determine the database path from args or config."""
+    if args.db_path:
+        return args.db_path
+    if config:
+        provenance_config = config.get("provenance", {})
+        if provenance_config.get("db_path"):
+            return provenance_config["db_path"]
+    # Fallback to a default if no other path is specified
+    default_db_path = "runs/runs.sqlite"  # Or derive from a central config
+    logger.warning(f"Database path not specified, defaulting to: {default_db_path}")
+    return default_db_path
 
 
 def _create_molecule(mol_data: dict) -> Molecule:
@@ -396,43 +411,59 @@ def run_command(args: argparse.Namespace):
 
 def results_command(args: argparse.Namespace):
     """Handles the 'results' subcommand to fetch and display run results."""
-    logger.info(f"Fetching results for run_id: {args.run_id}")
-    db = LogDb()  # Assumes default db_path='runs/runs.sqlite'
+    # Load config to find db_path if not provided directly
+    config = None
+    if args.job_file:  # Optional job file for results command
+        try:
+            config = load_config(args.job_file)
+        except Exception as e:
+            logger.warning(f"Could not load job config {args.job_file} to infer db_path: {e}")
+
+    db_path = _get_db_path(args, config)
+    logger.info(f"Fetching results for run_id '{args.run_id}' from database: {db_path}")
+
+    logdb = LogDb(db_path)
     try:
-        run_results = db.fetch_results(args.run_id)
-        if not run_results:
-            print(f"No results found for run_id '{args.run_id}'.", file=sys.stderr)
-            print(
-                "Please ensure the run_id is correct and the run completed successfully.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        print(f"\n--- Results for Run ID: {args.run_id} ---")
-        print(json.dumps(run_results, indent=2))
-
-    except Exception as e:
-        print(f"Error fetching or displaying results: {e}", file=sys.stderr)
-        sys.exit(1)
+        fetched_results = logdb.fetch_results(args.run_id)
+        if fetched_results:
+            print(f"Results for run_id '{args.run_id}':")
+            print(json.dumps(fetched_results, indent=4))
+        else:
+            print(f"No results found for run_id '{args.run_id}'.")
     finally:
-        db.close()  # Ensure database connection is closed
+        logdb.close()
 
 
-def run_dedup(args):
-    """Handler for the 'saptase dedup' command."""
+def db_deduplicate_command(args: argparse.Namespace):  # Renamed from run_dedup
+    """Handles the 'db deduplicate' subcommand."""
+    # Config is not strictly needed for deduplication if db_path is direct
+    db_path = _get_db_path(args)  # Pass args directly
+    logger.info(f"Deduplicating tasks in database: {db_path}")
+    logdb = LogDb(db_path)
     try:
-        db = LogDb(args.db)
-        logger.info(f"Attempting to deduplicate database: {args.db}")
-        logger.info(
-            f"Mode: keep {'newest' if args.overwrite else 'oldest'} entries for duplicates."
-        )
-        removed_count = db.deduplicate(overwrite=args.overwrite)
-        logger.info(f"Removed {removed_count} duplicate row(s).")
-        db.close()
-    except Exception as e:
-        logger.error(f"Error during deduplication: {e}", exc_info=True)
-        # Consider exiting with a non-zero status code for errors
-        # sys.exit(1)
+        removed_ids = logdb.deduplicate_tasks(overwrite=args.overwrite)
+        if removed_ids:
+            print(f"Deduplication complete. Removed {len(removed_ids)} task log entries.")
+            logger.info(f"Removed log_ids: {removed_ids}")
+        else:
+            print("No duplicate tasks found to remove.")
+    finally:
+        logdb.close()
+
+
+def db_delete_failed_command(args: argparse.Namespace):
+    """Handles the 'db delete-failed' subcommand."""
+    db_path = _get_db_path(args)  # Pass args directly
+    logger.info(f"Deleting failed tasks from database: {db_path}")
+    logdb = LogDb(db_path)
+    try:
+        num_deleted = logdb.delete_failed_tasks()
+        if num_deleted > 0:
+            print(f"Successfully deleted {num_deleted} failed task(s) from the database.")
+        else:
+            print("No failed tasks found to delete.")
+    finally:
+        logdb.close()
 
 
 def main(argv: Optional[List[str]] = None):
@@ -545,34 +576,59 @@ def main(argv: Optional[List[str]] = None):
     )
     parser_run.set_defaults(func=run_command)
 
-    # --- 'results' subcommand --- (New subcommand)
+    # --- 'results' subcommand ---
     results_parser = subparsers.add_parser(
-        "results", help="Fetch and display detailed results for a completed run_id."
+        "results", help="Fetch and display results from the database."
     )
-    results_parser.add_argument("run_id", help="The specific run_id to fetch results for.")
+    results_parser.add_argument("run_id", help="The run_id to fetch results for.")
+    results_parser.add_argument(
+        "--job-file",
+        "-j",
+        type=str,
+        help="Optional: Path to the YAML job file (to infer db_path if not directly provided).",
+    )
+    results_parser.add_argument(
+        "--db-path",
+        type=str,
+        default=None,  # Allow inferring from job_file or default
+        help="Path to the SQLite database file (e.g., runs/runs.sqlite). Overrides job_file inference.",
+    )
     results_parser.set_defaults(func=results_command)
 
-    # --- 'dedup' subcommand ---
-    dedup_parser = subparsers.add_parser(
-        "dedup",
-        help="Identify and remove duplicate results from the task_log table in a database.",
-        description=(
-            "Scans the task_log table for entries that are computationally identical "
-            "(based on monomers, basis set, and method). "
-            "By default, it keeps the oldest entry (by log_id) and removes newer duplicates. "
-            "Use --overwrite to keep the newest entry instead."
-        ),
+    # --- 'db' subcommand group ---
+    db_parser = subparsers.add_parser("db", help="Database management utilities.")
+    db_subparsers = db_parser.add_subparsers(
+        title="Database Commands", dest="db_command", required=True
     )
-    dedup_parser.add_argument(
-        "db", type=str, help="Path to the saptase SQLite database file (e.g., runs/runs.sqlite)."
+
+    # --- 'db delete-failed' subcommand ---
+    db_delete_failed_parser = db_subparsers.add_parser(
+        "delete-failed", help="Delete all tasks with status 'FAILED' from the database."
     )
-    dedup_parser.add_argument(
+    db_delete_failed_parser.add_argument(
+        "--db-path",
+        type=str,
+        help="Path to the SQLite database file (e.g., runs/runs.sqlite). If not provided, tries to infer or use default.",
+        default=None,
+    )
+    db_delete_failed_parser.set_defaults(func=db_delete_failed_command)
+
+    # --- 'db deduplicate' subcommand ---
+    db_deduplicate_parser = db_subparsers.add_parser(
+        "deduplicate", help="Deduplicate task entries in the database."
+    )
+    db_deduplicate_parser.add_argument(
+        "--db-path",
+        type=str,
+        help="Path to the SQLite database file (e.g., runs/runs.sqlite). If not provided, tries to infer or use default.",
+        default=None,
+    )
+    db_deduplicate_parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="If set, keep the newest (largest log_id) entry among duplicates and remove older ones. "
-        "Default is to keep the oldest (smallest log_id).",
+        help="If set, keeps the newest entry among duplicates instead of the oldest.",
     )
-    dedup_parser.set_defaults(func=run_dedup)
+    db_deduplicate_parser.set_defaults(func=db_deduplicate_command)
 
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands
@@ -612,21 +668,29 @@ def main(argv: Optional[List[str]] = None):
     if hasattr(args, "func"):
         try:
             args.func(args)
-        except SaptError as e:
-            logger.error(f"Error: {e}")
-            # Optionally, set a specific exit code for SaptError
-            # For example, sys.exit(1) or a custom code
-        except ConfigError as e:
-            logger.error(f"Configuration Error: {e}")
-            logger.error("Please check your YAML file and CLI arguments.")
-            # sys.exit(config_error_exit_code)
-        # Generic catch for other unexpected errors is good practice too
-        # except Exception as e:
-        #     logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-        #     # sys.exit(unexpected_error_exit_code)
+        except ConfigError as e:  # Catch custom config errors
+            logger.error(
+                f"Configuration Error: {e}", exc_info=args.debug
+            )  # Show traceback if debug
+            sys.exit(2)
+        except SaptError as e:  # Catch custom saptase errors
+            logger.error(f"SAPTASE Error: {e}", exc_info=args.debug)
+            sys.exit(3)
+        except sqlite3.Error as e:  # Catch SQLite errors
+            logger.error(f"Database Error: {e}", exc_info=args.debug)
+            sys.exit(4)
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", exc_info=args.debug)
+            sys.exit(1)
     else:
-        # This case should ideally not be reached if subcommands are required
-        parser.print_help()
+        # If no subcommand was provided, print help for the main parser
+        # If a subcommand was provided but it has no func (e.g., 'db' itself), print its help
+        if hasattr(args, "db_command") and args.db_command is None:  # User typed 'saptase db'
+            db_parser.print_help()
+        elif not any(vars(args).values()):  # No args at all
+            parser.print_help()
+        else:  # Fallback, should ideally be caught by argparse 'required=True' on subparsers
+            parser.print_help()
 
 
 if __name__ == "__main__":

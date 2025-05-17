@@ -383,12 +383,29 @@ class Psi4Backend(SaptBackend):
 
         # --- Scratch Directory Management --- #
         # Determine the root directory to use
-        # Priority: 1) explicit init arg, 2) env var, 3) OS default tmp
-        effective_scratch_root = self.scratch_root or os.getenv("SAPTASE_SCRATCH_ROOT")
+        # Priority: 1) Task-specific keyword, 2) Backend instance config, 3) Env Var, 4) TaskScratch default
+        task_specific_scratch_root = task.additional_keywords.get("scratch_root")
+        effective_scratch_root = (
+            task_specific_scratch_root or self.scratch_root or os.getenv("SAPTASE_SCRATCH_ROOT")
+        )
+        # If effective_scratch_root is still None here, TaskScratch will use its own defaults.
+
         # TaskScratch now manages the creation/deletion based on keep_scratch
         # We pass the determined root and the keep_scratch flag from self.
+        # The keep_scratch flag from task keywords should also be prioritized.
+        task_specific_keep_scratch = task.additional_keywords.get("keep_scratch")
+        effective_keep_scratch = self.keep_scratch  # Default to backend setting
+        if isinstance(task_specific_keep_scratch, bool):
+            effective_keep_scratch = task_specific_keep_scratch
+        elif task_specific_keep_scratch is not None:
+            # Attempt to interpret string values from keywords if necessary
+            # For now, assume boolean or None. Could add warning for unexpected types.
+            logger.warning(
+                f"Task {task.id} had non-boolean keep_scratch keyword: {task_specific_keep_scratch}. Using backend default."
+            )
+
         with TaskScratch(
-            task.id, scratch_root=effective_scratch_root, keep_scratch=self.keep_scratch
+            task.id, scratch_root=effective_scratch_root, keep_scratch=effective_keep_scratch
         ) as scratch_manager:
             # The actual scratch path for this task is available via scratch_manager
             # Pass the path string directly
