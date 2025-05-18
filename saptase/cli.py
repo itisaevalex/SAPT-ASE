@@ -443,7 +443,7 @@ def results_command(args: argparse.Namespace):
         logdb.close()
 
 
-def db_deduplicate_command(args: argparse.Namespace):  # Renamed from run_dedup
+def db_deduplicate_command(args: argparse.Namespace):
     """Handles the 'db deduplicate' subcommand."""
     # Config is not strictly needed for deduplication if db_path is direct
     db_path = _get_db_path(args)  # Pass args directly
@@ -476,25 +476,60 @@ def db_delete_failed_command(args: argparse.Namespace):
 
 
 def db_vacuum_command(args: argparse.Namespace):
-    """Handles the 'db vacuum' subcommand to rebuild and shrink the database."""
-    db_path = _get_db_path(args)
-    logger.info(f"Attempting to VACUUM database: {db_path}")
-    # LogDb class manages connection opening/closing, but VACUUM is special.
-    # It's safer to manage connection directly here for this command.
-    conn = None
+    """Handles the 'db vacuum' subcommand."""
+    db_path_to_vacuum = _get_db_path(args)
+    logger.info(f"Attempting to VACUUM database: {db_path_to_vacuum}")
     try:
-        conn = sqlite3.connect(db_path)
-        logger.info("Connection opened. Executing VACUUM...")
-        conn.execute("VACUUM")
-        conn.commit()
-        logger.info(f"Database {db_path} successfully vacuumed and committed.")
-    except sqlite3.Error as e:
-        logger.error(f"Error during VACUUM operation on {db_path}: {e}", exc_info=True)
-        # No rollback needed for VACUUM typically, but good practice if other ops were involved.
-    finally:
-        if conn:
-            conn.close()
-            logger.info(f"Connection to {db_path} closed.")
+        # LogDb handles its own connection, so we pass the path
+        logdb = LogDb(db_path_to_vacuum)
+        success = logdb.vacuum_db()
+        logdb.close()
+        if success:
+            print(f"Database {db_path_to_vacuum} VACUUMED successfully.")
+        else:
+            print(f"Failed to VACUUM database {db_path_to_vacuum}.")
+    except Exception as e:
+        print(f"Error during database VACUUM: {e}", file=sys.stderr)
+        logger.error(f"Error during database VACUUM for {db_path_to_vacuum}: {e}", exc_info=True)
+
+
+def db_merge_command(args: argparse.Namespace):
+    """Handles the 'db merge' subcommand."""
+    target_db_path = _get_db_path(args) # Target DB from --db-path or default
+    source_db_path = args.source_db
+
+    if not source_db_path:
+        print("Error: --source-db argument is required for merge operation.", file=sys.stderr)
+        sys.exit(1)
+
+    logger.info(f"Attempting to merge database {source_db_path} into {target_db_path}")
+
+    try:
+        # Initialize LogDb with the target database
+        target_logdb = LogDb(target_db_path)
+        merge_stats = target_logdb.merge_from_db(source_db_path)
+        target_logdb.close()
+
+        print(f"Database merge completed.")
+        print(f"  Source: {source_db_path}")
+        print(f"  Target: {target_db_path}")
+        print(f"  Task Logs Merged: {merge_stats['task_logs_merged']}")
+        print(f"  Task Logs Skipped: {merge_stats['task_logs_skipped']}")
+        print(f"  Results Merged: {merge_stats['results_merged']}")
+        print(f"  Results Skipped: {merge_stats['results_skipped']}")
+
+    except ConnectionError as e:
+        print(f"Database connection error: {e}", file=sys.stderr)
+        logger.error(f"Database connection error during merge: {e}", exc_info=True)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Database file error: {e}", file=sys.stderr)
+        logger.error(f"Database file error during merge: {e}", exc_info=True)
+        sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred during database merge: {e}", file=sys.stderr)
+        logger.error(f"Unexpected error during database merge: {e}", exc_info=True)
+        sys.exit(1)
 
 
 def main(argv: Optional[List[str]] = None):
@@ -633,51 +668,56 @@ def main(argv: Optional[List[str]] = None):
     results_parser.set_defaults(func=results_command)
 
     # --- 'db' subcommand group ---
-    db_parser = subparsers.add_parser("db", help="Database management utilities.")
-    db_subparsers = db_parser.add_subparsers(
-        title="Database Commands", dest="db_command", required=True
-    )
+    db_parser = subparsers.add_parser("db", help="Database management utilities (deduplicate, delete-failed, vacuum, merge)")
+    db_subparsers = db_parser.add_subparsers(title="db_commands", dest="db_command")
+    db_subparsers.required = True
 
-    # --- 'db delete-failed' subcommand ---
-    db_delete_failed_parser = db_subparsers.add_parser(
-        "delete-failed", help="Delete all tasks with status 'FAILED' from the database."
-    )
-    db_delete_failed_parser.add_argument(
-        "--db-path",
-        type=str,
-        help="Path to the SQLite database file (e.g., runs/runs.sqlite). If not provided, tries to infer or use default.",
-        default=None,
-    )
-    db_delete_failed_parser.set_defaults(func=db_delete_failed_command)
-
-    # --- 'db deduplicate' subcommand ---
-    db_deduplicate_parser = db_subparsers.add_parser(
+    # Deduplicate command
+    dedup_parser = db_subparsers.add_parser(
         "deduplicate", help="Deduplicate task entries in the database."
     )
-    db_deduplicate_parser.add_argument(
-        "--db-path",
-        type=str,
-        help="Path to the SQLite database file (e.g., runs/runs.sqlite). If not provided, tries to infer or use default.",
-        default=None,
+    dedup_parser.add_argument(
+        "--db-path", help="Path to the SQLite database file (overrides config)."
     )
-    db_deduplicate_parser.add_argument(
+    dedup_parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="If set, keeps the newest entry among duplicates instead of the oldest.",
+        help="Overwrite existing entries with the one having the latest timestamp if duplicates are found based on content hash.",
     )
-    db_deduplicate_parser.set_defaults(func=db_deduplicate_command)
+    dedup_parser.set_defaults(func=db_deduplicate_command)
 
-    # --- 'db vacuum' subcommand ---
-    db_vacuum_parser = db_subparsers.add_parser(
-        "vacuum", help="Rebuild and shrink the SQLite database file."
+    # Delete-failed command
+    delete_failed_parser = db_subparsers.add_parser(
+        "delete-failed", help="Delete failed task entries from the database."
     )
-    db_vacuum_parser.add_argument(
-        "--db-path",
-        type=str,
-        help="Path to the SQLite database file to vacuum. If not provided, tries to infer or use default.",
-        default=None,
+    delete_failed_parser.add_argument(
+        "--db-path", help="Path to the SQLite database file (overrides config)."
     )
-    db_vacuum_parser.set_defaults(func=db_vacuum_command)
+    delete_failed_parser.set_defaults(func=db_delete_failed_command)
+
+    # Vacuum command
+    vacuum_parser = db_subparsers.add_parser(
+        "vacuum", help="Vacuum the SQLite database to free up space."
+    )
+    vacuum_parser.add_argument(
+        "--db-path", help="Path to the SQLite database file (overrides config)."
+    )
+    vacuum_parser.set_defaults(func=db_vacuum_command)
+
+    # Merge command
+    merge_parser = db_subparsers.add_parser(
+        "merge", help="Merge entries from a source database into the target database."
+    )
+    merge_parser.add_argument(
+        "--source-db",
+        required=True,
+        help="Path to the source SQLite database file to merge from."
+    )
+    merge_parser.add_argument(
+        "--db-path", 
+        help="Path to the target SQLite database file (defaults to runs/runs.sqlite or as in config)."
+    )
+    merge_parser.set_defaults(func=db_merge_command)
 
     # ------------------------------------------------------------------
     # Global options applicable to all sub-commands

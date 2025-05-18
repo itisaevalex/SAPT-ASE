@@ -7,27 +7,24 @@ from saptase.cli import _get_db_path  # If needed for testing _get_db_path direc
 from saptase.cli import main as saptase_main
 
 
-@patch("saptase.cli.sqlite3.connect")  # Patch sqlite3.connect in the cli module
-def test_cli_db_vacuum(mock_sqlite_connect, tmp_path):
+@patch("saptase.cli.LogDb") # Patch LogDb where it's used in the cli module
+def test_cli_db_vacuum(MockLogDb, tmp_path):
     """Test the 'saptase db vacuum' CLI command."""
     # Arrange
     custom_db_name = "vacuum_test.sqlite"
     custom_db_path = tmp_path / custom_db_name
-    # custom_db_path.touch() # Not strictly necessary as connect will create it
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_sqlite_connect.return_value = mock_conn
-    mock_conn.cursor.return_value = mock_cursor  # Though vacuum doesn't use cursor directly
+    mock_logdb_instance = MagicMock()
+    MockLogDb.return_value = mock_logdb_instance
+    mock_logdb_instance.vacuum_db.return_value = True # Simulate successful vacuum
 
     # Act
     saptase_main(["db", "vacuum", "--db-path", str(custom_db_path)])
 
     # Assert
-    mock_sqlite_connect.assert_called_once_with(str(custom_db_path))
-    mock_conn.execute.assert_called_once_with("VACUUM")
-    mock_conn.commit.assert_called_once()
-    mock_conn.close.assert_called_once()
+    MockLogDb.assert_called_once_with(str(custom_db_path))
+    mock_logdb_instance.vacuum_db.assert_called_once()
+    mock_logdb_instance.close.assert_called_once()
 
 
 @patch("saptase.cli.LogDb")
