@@ -495,7 +495,7 @@ def db_vacuum_command(args: argparse.Namespace):
 
 def db_merge_command(args: argparse.Namespace):
     """Handles the 'db merge' subcommand."""
-    target_db_path = _get_db_path(args) # Target DB from --db-path or default
+    target_db_path = _get_db_path(args)  # Target DB from --db-path or default
     source_db_path = args.source_db
 
     if not source_db_path:
@@ -510,7 +510,7 @@ def db_merge_command(args: argparse.Namespace):
         merge_stats = target_logdb.merge_from_db(source_db_path)
         target_logdb.close()
 
-        print(f"Database merge completed.")
+        print("Database merge completed.")
         print(f"  Source: {source_db_path}")
         print(f"  Target: {target_db_path}")
         print(f"  Task Logs Merged: {merge_stats['task_logs_merged']}")
@@ -668,7 +668,9 @@ def main(argv: Optional[List[str]] = None):
     results_parser.set_defaults(func=results_command)
 
     # --- 'db' subcommand group ---
-    db_parser = subparsers.add_parser("db", help="Database management utilities (deduplicate, delete-failed, vacuum, merge)")
+    db_parser = subparsers.add_parser(
+        "db", help="Database management utilities (deduplicate, delete-failed, vacuum, merge)"
+    )
     db_subparsers = db_parser.add_subparsers(title="db_commands", dest="db_command")
     db_subparsers.required = True
 
@@ -709,13 +711,11 @@ def main(argv: Optional[List[str]] = None):
         "merge", help="Merge entries from a source database into the target database."
     )
     merge_parser.add_argument(
-        "--source-db",
-        required=True,
-        help="Path to the source SQLite database file to merge from."
+        "--source-db", required=True, help="Path to the source SQLite database file to merge from."
     )
     merge_parser.add_argument(
-        "--db-path", 
-        help="Path to the target SQLite database file (defaults to runs/runs.sqlite or as in config)."
+        "--db-path",
+        help="Path to the target SQLite database file (defaults to runs/runs.sqlite or as in config).",
     )
     merge_parser.set_defaults(func=db_merge_command)
 

@@ -7,7 +7,7 @@ from saptase.cli import _get_db_path  # If needed for testing _get_db_path direc
 from saptase.cli import main as saptase_main
 
 
-@patch("saptase.cli.LogDb") # Patch LogDb where it's used in the cli module
+@patch("saptase.cli.LogDb")  # Patch LogDb where it's used in the cli module
 def test_cli_db_vacuum(MockLogDb, tmp_path):
     """Test the 'saptase db vacuum' CLI command."""
     # Arrange
@@ -16,7 +16,7 @@ def test_cli_db_vacuum(MockLogDb, tmp_path):
 
     mock_logdb_instance = MagicMock()
     MockLogDb.return_value = mock_logdb_instance
-    mock_logdb_instance.vacuum_db.return_value = True # Simulate successful vacuum
+    mock_logdb_instance.vacuum_db.return_value = True  # Simulate successful vacuum
 
     # Act
     saptase_main(["db", "vacuum", "--db-path", str(custom_db_path)])

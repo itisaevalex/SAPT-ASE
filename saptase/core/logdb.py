@@ -725,27 +725,37 @@ class LogDb:
         deleted_count = 0
         try:
             # First, get task_ids of failed tasks to also remove from results
-            self.cursor.execute("SELECT task_id, run_id FROM task_log WHERE status = ?", (TaskStatus.FAILED.name,))
+            self.cursor.execute(
+                "SELECT task_id, run_id FROM task_log WHERE status = ?", (TaskStatus.FAILED.name,)
+            )
             failed_tasks_to_clean = self.cursor.fetchall()
 
             if failed_tasks_to_clean:
-                logger.info(f"Found {len(failed_tasks_to_clean)} failed task entries to potentially clean from results table.")
+                logger.info(
+                    f"Found {len(failed_tasks_to_clean)} failed task entries to potentially clean from results table."
+                )
                 # Delete from results table first
                 # This assumes task_id alone might not be unique across different runs if not careful
                 # So, using (run_id, task_id) is safer if primary key is (run_id, task_id)
-                placeholders = ", ".join(["(?, ?)"] * len(failed_tasks_to_clean))
+                # placeholders = ", ".join(["(?, ?) "] * len(failed_tasks_to_clean)) # Unused variable
                 # Prepare list of tuples (run_id, task_id)
                 params_for_results_delete = [(ft[1], ft[0]) for ft in failed_tasks_to_clean]
 
                 # Flatten params for execute
-                flat_params_results = [item for sublist in params_for_results_delete for item in sublist]
-
+                # flat_params_results = [ # Unused variable
+                # item for sublist in params_for_results_delete for item in sublist
+                # ]
 
                 # This part needs to be careful if results table PK is just task_id
                 # Assuming results table has run_id and task_id
                 # Create a temporary table of (run_id, task_id) pairs to delete
-                self.cursor.execute("CREATE TEMP TABLE IF NOT EXISTS failed_tasks_to_delete (run_id TEXT, task_id TEXT, PRIMARY KEY (run_id, task_id))")
-                self.cursor.executemany("INSERT OR IGNORE INTO failed_tasks_to_delete (run_id, task_id) VALUES (?, ?)", params_for_results_delete)
+                self.cursor.execute(
+                    "CREATE TEMP TABLE IF NOT EXISTS failed_tasks_to_delete (run_id TEXT, task_id TEXT, PRIMARY KEY (run_id, task_id))"
+                )
+                self.cursor.executemany(
+                    "INSERT OR IGNORE INTO failed_tasks_to_delete (run_id, task_id) VALUES (?, ?)",
+                    params_for_results_delete,
+                )
 
                 # Delete from results using the temporary table
                 res_del_stmt = self.cursor.execute(
@@ -754,19 +764,22 @@ class LogDb:
                     WHERE (run_id, task_id) IN (SELECT run_id, task_id FROM failed_tasks_to_delete)
                     """
                 )
-                logger.info(f"Deleted {res_del_stmt.rowcount} associated entries from 'results' table.")
+                logger.info(
+                    f"Deleted {res_del_stmt.rowcount} associated entries from 'results' table."
+                )
                 self.cursor.execute("DROP TABLE failed_tasks_to_delete")
 
-
             # Then, delete from task_log
-            delete_stmt = self.cursor.execute("DELETE FROM task_log WHERE status = ?", (TaskStatus.FAILED.name,))
+            delete_stmt = self.cursor.execute(
+                "DELETE FROM task_log WHERE status = ?", (TaskStatus.FAILED.name,)
+            )
             deleted_count = delete_stmt.rowcount
             self.conn.commit()  # Explicit commit after operations
             logger.info(f"Deleted {deleted_count} 'FAILED' tasks from task_log.")
         except sqlite3.Error as e:
             logger.error(f"Error deleting failed tasks: {e}")
             try:
-                self.conn.rollback() # Rollback on error
+                self.conn.rollback()  # Rollback on error
             except sqlite3.Error as rb_err:
                 logger.error(f"Rollback failed: {rb_err}")
         return deleted_count
@@ -779,7 +792,7 @@ class LogDb:
         try:
             logger.info(f"Starting VACUUM on {self.db_path}...")
             self.conn.execute("VACUUM;")
-            self.conn.commit() # VACUUM runs in autocommit mode or needs commit after in some drivers
+            self.conn.commit()  # VACUUM runs in autocommit mode or needs commit after in some drivers
             logger.info(f"VACUUM completed successfully on {self.db_path}.")
             return True
         except sqlite3.Error as e:
@@ -802,54 +815,124 @@ class LogDb:
         """
         if not self.conn or not self.cursor:
             logger.error(f"Target database {self.db_path} not connected. Cannot merge.")
-            return {"task_logs_merged": 0, "results_merged": 0, "task_logs_skipped": 0, "results_skipped": 0}
+            return {
+                "task_logs_merged": 0,
+                "results_merged": 0,
+                "task_logs_skipped": 0,
+                "results_skipped": 0,
+            }
 
         source_path = Path(source_db_path)
         if not source_path.exists():
             logger.error(f"Source database {source_path} not found.")
-            return {"task_logs_merged": 0, "results_merged": 0, "task_logs_skipped": 0, "results_skipped": 0}
+            return {
+                "task_logs_merged": 0,
+                "results_merged": 0,
+                "task_logs_skipped": 0,
+                "results_skipped": 0,
+            }
 
-        counts = {"task_logs_merged": 0, "results_merged": 0, "task_logs_skipped": 0, "results_skipped": 0}
+        counts = {
+            "task_logs_merged": 0,
+            "results_merged": 0,
+            "task_logs_skipped": 0,
+            "results_skipped": 0,
+        }
         source_conn = None
 
         try:
             logger.info(f"Connecting to source database: {source_path}")
             # Connect to source DB in read-only mode if possible, and ensure WAL is handled if source uses it.
             # URI mode can specify read-only: f"file:{source_path}?mode=ro"
-            source_conn = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True, isolation_level=None)
+            source_conn = sqlite3.connect(
+                f"file:{source_path}?mode=ro", uri=True, isolation_level=None
+            )
             source_cursor = source_conn.cursor()
             # Ensure WAL mode is respected if source uses it, for stability during read
-            source_cursor.execute("PRAGMA journal_mode;") # Read current mode
+            source_cursor.execute("PRAGMA journal_mode;")  # Read current mode
             source_journal_mode = source_cursor.fetchone()
             if source_journal_mode and source_journal_mode[0].lower() == "wal":
-                 # If source is WAL, it's fine for reading. No action needed on source.
-                 # Target DB's WAL mode is managed by its own connection.
+                # If source is WAL, it's fine for reading. No action needed on source.
+                # Target DB's WAL mode is managed by its own connection.
                 pass
-
 
             # 1. Merge task_log table
             logger.info(f"Fetching task_log entries from {source_path}...")
-            source_cursor.execute("SELECT * FROM task_log")
-            task_log_columns = [desc[0] for desc in source_cursor.description]
-            placeholders = ", ".join(["?"] * len(task_log_columns))
-            insert_sql_task_log = f"INSERT OR IGNORE INTO task_log ({', '.join(task_log_columns)}) VALUES ({placeholders})"
-            
-            fetched_tasks = 0
-            for row in source_cursor: # Iterate row by row to handle large DBs
-                fetched_tasks +=1
-                try:
-                    self.cursor.execute(insert_sql_task_log, row)
-                    if self.cursor.rowcount > 0:
-                        counts["task_logs_merged"] += 1
-                    else:
-                        counts["task_logs_skipped"] += 1
-                except sqlite3.IntegrityError as e: # Should be caught by OR IGNORE, but as fallback
-                    logger.warning(f"Skipping task_log row due to integrity error (likely duplicate): {e}. Row: {row[:3]}") # Log first few elements
-                    counts["task_logs_skipped"] += 1
-                except sqlite3.Error as e:
-                    logger.error(f"Error inserting task_log row from source: {e}. Row: {row[:3]}")
-            logger.info(f"Processed {fetched_tasks} task_log entries from source. Merged: {counts['task_logs_merged']}, Skipped: {counts['task_logs_skipped']}")
 
+            # Get column names from source task_log, excluding log_id for insertion
+            source_cursor.execute("PRAGMA table_info(task_log)")
+            source_task_log_cols_info = source_cursor.fetchall()
+            # (cid, name, type, notnull, dflt_value, pk)
+            task_log_cols_for_select = [col_info[1] for col_info in source_task_log_cols_info]
+            task_log_cols_for_insert = [
+                col_info[1] for col_info in source_task_log_cols_info if col_info[1] != "log_id"
+            ]
+
+            placeholders_insert = ", ".join(["?"] * len(task_log_cols_for_insert))
+            insert_sql_task_log = f"INSERT INTO task_log ({', '.join(task_log_cols_for_insert)}) VALUES ({placeholders_insert})"
+
+            # Determine indices of run_id, task_id, attempt_number in the selected columns
+            try:
+                idx_run_id = task_log_cols_for_select.index("run_id")
+                idx_task_id = task_log_cols_for_select.index("task_id")
+                idx_attempt_number = task_log_cols_for_select.index("attempt_number")
+            except ValueError as e:
+                logger.error(
+                    f"Source database {source_path} task_log table is missing critical columns (run_id, task_id, or attempt_number): {e}"
+                )
+                # Abort merge for task_log if critical columns are missing
+                raise sqlite3.OperationalError(f"Source task_log missing key columns: {e}") from e
+
+            source_cursor.execute(f"SELECT {', '.join(task_log_cols_for_select)} FROM task_log")
+
+            fetched_tasks = 0
+            for source_row_tuple in source_cursor:  # Iterate row by row to handle large DBs
+                fetched_tasks += 1
+
+                # Extract values for checking existence and for insertion
+                # The source_row_tuple matches the order of task_log_cols_for_select
+                run_id_val = source_row_tuple[idx_run_id]
+                task_id_val = source_row_tuple[idx_task_id]
+                attempt_number_val = source_row_tuple[idx_attempt_number]
+
+                # Data for insertion (all columns from source_row_tuple except log_id if it was selected first)
+                # We need to map source_row_tuple to task_log_cols_for_insert order
+                data_for_insert_map = dict(zip(task_log_cols_for_select, source_row_tuple))
+                data_for_insert_tuple = tuple(
+                    data_for_insert_map[col_name] for col_name in task_log_cols_for_insert
+                )
+
+                # Check if this task attempt already exists in the target DB
+                self.cursor.execute(
+                    "SELECT 1 FROM task_log WHERE run_id = ? AND task_id = ? AND attempt_number = ? LIMIT 1",
+                    (run_id_val, task_id_val, attempt_number_val),
+                )
+                exists = self.cursor.fetchone()
+
+                if not exists:
+                    try:
+                        self.cursor.execute(insert_sql_task_log, data_for_insert_tuple)
+                        if self.cursor.rowcount > 0:
+                            counts["task_logs_merged"] += 1
+                        else:
+                            # This case should ideally not happen if exists check was false and insert is valid
+                            logger.warning(
+                                f"Task log insert for ({run_id_val}, {task_id_val}, att {attempt_number_val}) had 0 rowcount despite not existing."
+                            )
+                            counts[
+                                "task_logs_skipped"
+                            ] += 1  # Or a new counter for unexpected skips
+                    except sqlite3.Error as e:
+                        logger.error(
+                            f"Error inserting task_log row from source ({run_id_val}, {task_id_val}, att {attempt_number_val}): {e}. Row data: {data_for_insert_tuple}"
+                        )
+                        counts["task_logs_skipped"] += 1  # Treat as skipped on error
+                else:
+                    counts["task_logs_skipped"] += 1
+
+            logger.info(
+                f"Processed {fetched_tasks} task_log entries from source. Merged: {counts['task_logs_merged']}, Skipped: {counts['task_logs_skipped']} (based on run_id, task_id, attempt_number uniqueness)"
+            )
 
             # 2. Merge results table
             logger.info(f"Fetching results entries from {source_path}...")
@@ -859,43 +942,55 @@ class LogDb:
             insert_sql_results = f"INSERT OR IGNORE INTO results ({', '.join(results_columns)}) VALUES ({placeholders_results})"
 
             fetched_results = 0
-            for row in source_cursor: # Iterate row by row
-                fetched_results +=1
+            for row in source_cursor:  # Iterate row by row
+                fetched_results += 1
                 try:
                     self.cursor.execute(insert_sql_results, row)
                     if self.cursor.rowcount > 0:
                         counts["results_merged"] += 1
                     else:
                         counts["results_skipped"] += 1
-                except sqlite3.IntegrityError as e: # Should be caught by OR IGNORE
-                    logger.warning(f"Skipping results row due to integrity error (likely duplicate): {e}. Row: {row[:2]}")
+                except sqlite3.IntegrityError as e:  # Should be caught by OR IGNORE
+                    logger.warning(
+                        f"Skipping results row due to integrity error (likely duplicate): {e}. Row: {row[:2]}"
+                    )
                     counts["results_skipped"] += 1
                 except sqlite3.Error as e:
                     logger.error(f"Error inserting results row from source: {e}. Row: {row[:2]}")
-            logger.info(f"Processed {fetched_results} results entries from source. Merged: {counts['results_merged']}, Skipped: {counts['results_skipped']}")
+            logger.info(
+                f"Processed {fetched_results} results entries from source. Merged: {counts['results_merged']}, Skipped: {counts['results_skipped']}"
+            )
 
             self.conn.commit()
-            logger.info(f"Merge completed. Task logs: {counts['task_logs_merged']} merged, {counts['task_logs_skipped']} skipped. Results: {counts['results_merged']} merged, {counts['results_skipped']} skipped.")
+            logger.info(
+                f"Merge completed. Task logs: {counts['task_logs_merged']} merged, {counts['task_logs_skipped']} skipped. Results: {counts['results_merged']} merged, {counts['results_skipped']} skipped."
+            )
 
         except sqlite3.OperationalError as e:
             # Check if it's because a table doesn't exist in the source
             if "no such table" in str(e).lower():
-                logger.error(f"Source database {source_path} is missing expected tables (task_log or results): {e}")
+                logger.error(
+                    f"Source database {source_path} is missing expected tables (task_log or results): {e}"
+                )
             else:
                 logger.error(f"SQLite operational error merging from {source_path}: {e}")
-            if self.conn: self.conn.rollback()
+            if self.conn:
+                self.conn.rollback()
         except sqlite3.Error as e:
             logger.error(f"SQLite error merging from {source_path}: {e}")
-            if self.conn: self.conn.rollback()
+            if self.conn:
+                self.conn.rollback()
         except Exception as e:
             logger.error(f"Unexpected error merging from {source_path}: {e}", exc_info=True)
-            if self.conn: self.conn.rollback()
+            if self.conn:
+                self.conn.rollback()
         finally:
             if source_conn:
                 source_conn.close()
                 logger.info(f"Closed connection to source database: {source_path}")
-        
+
         return counts
+
 
 # Helper function for testing or standalone script execution if needed
 # def main_test():
