@@ -859,16 +859,20 @@ class SaptWorkflow:
     def _process_task(self, task: SaptTask) -> SaptResult:
         """Process a single task."""
         # Check for cached result first
-        monomer_a_xyz = task.monomer_a.to_xyz_string()  # This will now use original_xyz if available
-        monomer_b_xyz = task.monomer_b.to_xyz_string()  # This will now use original_xyz if available
-        
+        monomer_a_xyz = (
+            task.monomer_a.to_xyz_string()
+        )  # This will now use original_xyz if available
+        monomer_b_xyz = (
+            task.monomer_b.to_xyz_string()
+        )  # This will now use original_xyz if available
+
         cached_result = self.logdb.get_cached_result(
             monomer_a_xyz=monomer_a_xyz,
             monomer_b_xyz=monomer_b_xyz,
             basis_set=task.basis_set,
-            method=task.method
+            method=task.method,
         )
-        
+
         if cached_result:
             logger.info(f"Cache hit for task {task.id}")
             return cached_result

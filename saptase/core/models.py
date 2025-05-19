@@ -60,7 +60,7 @@ class Molecule:
         """Convert molecule to XYZ format string."""
         if self.original_xyz is not None:
             return self.original_xyz
-            
+
         lines = [str(len(self.symbols))]
         if self.name:
             lines.append(self.name)
@@ -103,7 +103,7 @@ class Molecule:
             charge=charge,
             multiplicity=multiplicity,
             name=name if name else None,
-            original_xyz=xyz_string
+            original_xyz=xyz_string,
         )
 
     @classmethod
