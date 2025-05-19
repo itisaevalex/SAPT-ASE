@@ -27,6 +27,13 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `get_cached_result` and cache population logic to `LogDb`.
 - Integrated cache check into `saptase.core.orchestrator._execute_task_for_parallel`.
 - Added `tests/test_cache_hit.py` to verify the caching mechanism.
+- Modified `saptase.core.models.Molecule` to store `original_xyz` string to improve caching consistency by using the exact string from input files.
+- Updated `saptase.core.orchestrator` to utilize the `original_xyz` from `Molecule` objects for cache lookups.
+- Created `fix_xyz_strings.py` script to update XYZ string precision in the database by reading from original .xyz files (development ongoing, use case superseded by targeted reruns).
+- Created `find_missing_tasks.py` script to identify tasks from a YAML configuration that are missing or not marked 'COMPLETED' in the SQLite database. This script was refined to:
+    - Handle duplicate task entries in the input YAML.
+    - Provide detailed listings of tasks and their statuses from both YAML and DB for better diagnostics.
+- Created `add_missing_tasks.py` script to manually insert specific tasks (with `PENDING` status and correct schema) into the `task_log` table of a specified SQLite database, facilitating targeted reruns.
 
 ### Changed
 - Modified GitHub Actions workflow (`.github/workflows/ci.yml`):

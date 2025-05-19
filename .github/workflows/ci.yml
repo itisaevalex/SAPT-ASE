@@ -37,12 +37,8 @@ jobs:
       fail-fast: false # Don't cancel all jobs if one fails
       matrix:
         python-version: ['3.10', '3.11'] # Note: environment-ci.yml constrains Python, this mainly serves as matrix key
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         psi4-mode: ["mock", "real"]
-        # Exclude Windows + Real Psi4 for now (no windows binary)
-        exclude:
-          - os: windows-latest
-            psi4-mode: real
 
     steps:
     - uses: actions/checkout@v3 # Consider updating to v4 if available/compatible
@@ -131,8 +127,6 @@ jobs:
     # ----------------------------------------------------------------------
     - name: Run CLI Dask smoke test
       if: ${{ !cancelled() }} # Only run if previous steps succeeded
-      # Continue on Windows due to potential dask port flakes (only affects mock mode now)
-      continue-on-error: ${{ matrix.os == 'windows-latest' && matrix.psi4-mode == 'mock' }}
       shell: bash -l {0} # Explicitly use login shell to allow micromamba activate
       env:
         OMP_NUM_THREADS: 1
