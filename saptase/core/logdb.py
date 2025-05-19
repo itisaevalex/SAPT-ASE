@@ -202,6 +202,7 @@ class LogDb:
                 CREATE TABLE IF NOT EXISTS results (
                     run_id         TEXT NOT NULL,
                     task_id        TEXT NOT NULL,
+                    dimer_name     TEXT,          -- Canonical dimer name, consistent with task_log
                     energies_json  TEXT,
                     PRIMARY KEY (run_id, task_id)
                 )
@@ -333,10 +334,10 @@ class LogDb:
                 energies_json = json.dumps(getattr(result, "energies", {}))
                 self.cursor.execute(
                     """
-                    INSERT OR REPLACE INTO results (run_id, task_id, energies_json)
-                    VALUES (?, ?, ?)
+                    INSERT OR REPLACE INTO results (run_id, task_id, dimer_name, energies_json)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    (run_id, result.task_id, energies_json),
+                    (run_id, result.task_id, dimer_name, energies_json), # dimer_name is from getattr(result, "dimer_name", None)
                 )
                 logger.debug(
                     f"Persisted energies for successful task {result.task_id} in run {run_id}"
