@@ -1,5 +1,9 @@
-# MD5 Hash: 0da5c5422cb426b7531845f35e8ebcb4
-# --- Monomer A ---
+# DB-Derived MD5 Hash (Key for YAML): f64ac016b9582870163ec7387b9c29e4
+# Example task_id from DB: 13_formamide_dimer_aug-cc-pVDZ
+# Guessed Dimer Name (from task_id regex '^(?P<dimer_name>\d{2}_(?:[A-Za-z0-9]+_)*[A-Za-z0-9]+)(?:_|$)'): 13_formamide_dimer
+# This hash was generated from direct concatenation of Monomer A XYZ and Monomer B XYZ from the database.
+
+# --- Monomer A (from DB) ---
 6
 
 C     -2.018649     0.052883     0.000000
@@ -9,7 +13,7 @@ H     -1.964596    -1.977036     0.000000
 H     -0.387244    -1.207782     0.000000
 H     -3.117061    -0.013701     0.000000
 
-# --- Monomer B ---
+# --- Monomer B (from DB) ---
 6
 
 C      2.018649    -0.052883     0.000000

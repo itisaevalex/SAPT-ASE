@@ -1,0 +1,18 @@
+# DB-Derived MD5 Hash (Key for YAML): 38bc192df55123ffcd439c2d34fc1ff4
+# Example task_id from DB: 22_water_dimer_aug-cc-pVDZ
+# Guessed Dimer Name (from task_id regex '^(?P<dimer_name>\d{2}_(?:[A-Za-z0-9]+_)*[A-Za-z0-9]+)(?:_|$)'): 22_water_dimer
+# This hash was generated from direct concatenation of Monomer A XYZ and Monomer B XYZ from the database.
+
+# --- Monomer A (from DB) ---
+3
+
+O     -1.551007    -0.114520     0.000000
+H     -1.934259     0.762503     0.000000
+H     -0.599677     0.040712     0.000000
+
+# --- Monomer B (from DB) ---
+3
+
+O      1.350625     0.111469     0.000000
+H      1.680398    -0.373741    -0.758561
+H      1.680398    -0.373741     0.758561
