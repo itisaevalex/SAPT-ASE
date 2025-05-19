@@ -8,6 +8,7 @@ Expects monomer files named like '*_a.xyz' and '*_b.xyz' in the directory.
 import argparse
 import pathlib
 import textwrap  # Import textwrap
+import json      # Added for --pairs-json
 
 import yaml
 
@@ -68,62 +69,107 @@ def main():
         default=None,
         help="Optional path to a master SQLite database. If provided, tasks already completed in this DB will be skipped.",
     )
+    p.add_argument(
+        "--pairs-json",
+        type=pathlib.Path,
+        default=None,
+        help="Path to a JSON file containing a list of [dimer_name, basis_set] pairs. Overrides --basis-list and normal XYZ file iteration.",
+    )
 
     args = p.parse_args()
 
     if not args.split_xyz_dir.is_dir():
         raise FileNotFoundError(f"Split XYZ directory not found: {args.split_xyz_dir}")
 
-    bases = [b.strip() for b in args.basis_list.split(",") if b.strip()] or BASIS_DEFAULT
-
-    # Find all monomer A files
-    monomer_a_files = sorted(args.split_xyz_dir.glob("*_a.xyz"))
-
-    if not monomer_a_files:
-        print(f"Warning: No '*_a.xyz' files found in {args.split_xyz_dir}")
-        # Decide if this should be an error
-
     tasks = []
-    num_pairs = 0  # Counter for valid pairs
-    # Iterate through monomer A files to find corresponding monomer B files
-    for file_a in monomer_a_files:
-        # Construct the expected filename for monomer B
-        base_name = file_a.name.replace("_a.xyz", "")
-        file_b = args.split_xyz_dir / f"{base_name}_b.xyz"
+    num_pairs = 0 # Counter for valid pairs processed
 
-        if not file_b.is_file():
-            print(
-                f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}."
-            )
-            continue
+    if args.pairs_json:
+        if not args.pairs_json.exists():
+            raise FileNotFoundError(f"Pairs JSON file not found: {args.pairs_json}")
+        with open(args.pairs_json, 'r') as f:
+            specific_pairs = json.load(f)  # Expected: list of [dimer_name_str, basis_set_str]
+        
+        print(f"Generating tasks based on {len(specific_pairs)} specific pairs from {args.pairs_json}...")
+        for dimer_name_from_json, basis_from_json in specific_pairs:
+            # Construct file paths based on dimer_name_from_json
+            # Ensure dimer_name_from_json matches the base_name convention (e.g., '04_ammonia_dimer')
+            file_a_path_str = str(args.split_xyz_dir / f"{dimer_name_from_json}_a.xyz")
+            file_b_path_str = str(args.split_xyz_dir / f"{dimer_name_from_json}_b.xyz")
 
-        num_pairs += 1  # Found a valid pair
-
-        # Create tasks for each basis set for this monomer pair
-        for basis in bases:
-            # Use the base name (without _a/_b suffix) for the task ID
-            dimer_name = base_name.replace(" ", "_")  # Sanitize name
-            task_id = f"{dimer_name}_{basis}"
-
-            # Define monomers using relative paths from the repository root
-            # The Path objects file_a and file_b already hold this.
+            if not pathlib.Path(file_a_path_str).is_file():
+                print(f"Warning: Monomer A file {file_a_path_str} not found for dimer '{dimer_name_from_json}' from JSON. Skipping.")
+                continue
+            if not pathlib.Path(file_b_path_str).is_file():
+                print(f"Warning: Monomer B file {file_b_path_str} not found for dimer '{dimer_name_from_json}' from JSON. Skipping.")
+                continue
+            
+            num_pairs += 1 # Count this as a pair we are attempting to create a task for
+            task_id = f"{dimer_name_from_json}_{basis_from_json}" 
             tasks.append(
                 {
                     "id": task_id,
-                    "basis_set": basis,
+                    "basis_set": basis_from_json,
                     "method": args.method,
                     "monomer_a": {
-                        "file": str(file_a),
+                        "file": file_a_path_str,
                         "charge": args.monomer_a_charge,
                         "multiplicity": args.monomer_a_mult,
                     },
                     "monomer_b": {
-                        "file": str(file_b),
+                        "file": file_b_path_str,
                         "charge": args.monomer_b_charge,
                         "multiplicity": args.monomer_b_mult,
                     },
                 }
             )
+        if num_pairs == 0 and specific_pairs:
+             print("Warning: No tasks were generated from --pairs-json. Check file paths and dimer names.")
+
+    else:  # Original logic: iterate all XYZ files and basis_list
+        bases = [b.strip() for b in args.basis_list.split(",") if b.strip()] or BASIS_DEFAULT
+        monomer_a_files = sorted(args.split_xyz_dir.glob("*_a.xyz"))
+
+        if not monomer_a_files:
+            print(f"Warning: No '*_a.xyz' files found in {args.split_xyz_dir}")
+
+        # Iterate through monomer A files to find corresponding monomer B files
+        for file_a in monomer_a_files:
+            base_name = file_a.name.replace("_a.xyz", "")
+            file_b = args.split_xyz_dir / f"{base_name}_b.xyz"
+
+            if not file_b.is_file():
+                print(
+                    f"Warning: Corresponding monomer B file not found for {file_a.name}. Skipping dimer {base_name}."
+                )
+                continue
+
+            num_pairs += 1  # Found a valid pair for combinatorial expansion
+
+            # Create tasks for each basis set for this monomer pair
+            for basis in bases:
+                dimer_name_for_id = base_name.replace(" ", "_")  # Sanitize name for task_id
+                task_id = f"{dimer_name_for_id}_{basis}"
+
+                tasks.append(
+                    {
+                        "id": task_id,
+                        "basis_set": basis,
+                        "method": args.method,
+                        "monomer_a": {
+                            "file": str(file_a), # Ensure paths are strings for YAML
+                            "charge": args.monomer_a_charge,
+                            "multiplicity": args.monomer_a_mult,
+                        },
+                        "monomer_b": {
+                            "file": str(file_b), # Ensure paths are strings for YAML
+                            "charge": args.monomer_b_charge,
+                            "multiplicity": args.monomer_b_mult,
+                        },
+                    }
+                )
+        if num_pairs == 0 and monomer_a_files:
+            print("Warning: No valid monomer pairs (*_a.xyz, *_b.xyz) found for task generation.")
 
     # --- Potentially filter tasks based on master_db_path ---
     if args.master_db_path and args.master_db_path.exists():

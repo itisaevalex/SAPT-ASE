@@ -26,7 +26,7 @@ SAPTASE (Symmetry-Adapted Perturbation Theory Automated Simulation Engine) is a 
 ## Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
 - NumPy
 
 ### General Installation
@@ -46,6 +46,37 @@ pip install -e .[dev] # For an editable install with development dependencies
 # or
 # pip install . # For a standard install
 ```
+
+##### CLI Command Reference
+
+- `saptase run <job.yml>` – run a standard workflow defined in a YAML/JSON file.
+- `saptase run-adaptive <config.yml>` – execute an adaptive basis escalation workflow.
+- `saptase results <run_id>` – fetch and display results from the provenance database.
+- `saptase db <deduplicate|delete-failed|vacuum|merge>` – manage the SQLite log database.
+
+Global options such as `--scratch-root` and `--keep-scratch` may be supplied before the subcommand to override scratch directory handling.
+
+The CLI also provides database management utilities under the `db` subcommand:
+```bash
+# Vacuum the default database (runs/saptase_provenance.sqlite)
+saptase db vacuum
+
+# Vacuum a specific database
+saptase db vacuum --db-path my_workflow.sqlite
+
+# Delete failed tasks from a specific database
+saptase db delete-failed --db-path my_workflow.sqlite
+
+# Deduplicate tasks in a specific database (keeps oldest successful by default)
+saptase db deduplicate --db-path my_workflow.sqlite
+
+# Deduplicate tasks, keeping the newest successful record if duplicates are found
+saptase db deduplicate --db-path my_workflow.sqlite --overwrite
+
+# Merge entries from a chunk database into the main database
+saptase db merge --source-db chunk2.sqlite --db-path my_workflow.sqlite
+```
+
 
 ### Installing with Psi4 (Optional Backend)
 Psi4 is the primary supported quantum chemistry backend.
