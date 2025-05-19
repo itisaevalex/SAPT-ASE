@@ -32,6 +32,7 @@ class Molecule:
         charge: Total charge of the molecule
         multiplicity: Spin multiplicity of the molecule
         name: Optional name for the molecule
+        original_xyz: Optional original XYZ string from file
     """
 
     symbols: List[str]
@@ -39,6 +40,7 @@ class Molecule:
     charge: int = 0
     multiplicity: int = 1
     name: Optional[str] = None
+    original_xyz: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Validate inputs and convert coordinates to numpy array if needed."""
@@ -56,6 +58,9 @@ class Molecule:
 
     def to_xyz_string(self) -> str:
         """Convert molecule to XYZ format string."""
+        if self.original_xyz is not None:
+            return self.original_xyz
+            
         lines = [str(len(self.symbols))]
         if self.name:
             lines.append(self.name)
@@ -98,6 +103,7 @@ class Molecule:
             charge=charge,
             multiplicity=multiplicity,
             name=name if name else None,
+            original_xyz=xyz_string
         )
 
     @classmethod

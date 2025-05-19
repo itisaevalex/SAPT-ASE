@@ -1,0 +1,14 @@
+execution:
+  mode: local_parallel
+tasks:
+- basis_set: jun-cc-pVDZ
+  id: 13_formamide_dimer_jun-cc-pVDZ
+  method: sapt0
+  monomer_a:
+    charge: 0
+    file: data\s22_split\13_formamide_dimer_a.xyz
+    multiplicity: 1
+  monomer_b:
+    charge: 0
+    file: data\s22_split\13_formamide_dimer_b.xyz
+    multiplicity: 1
