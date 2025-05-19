@@ -138,6 +138,7 @@ class SaptTask:
     id: Optional[str] = None
     status: TaskStatus = TaskStatus.PENDING
     additional_keywords: Dict[str, Any] = field(default_factory=dict)
+    dimer_name: Optional[str] = None  # Canonical name for the dimer system
 
     def __post_init__(self) -> None:
         """Generate a task ID if none is provided."""
@@ -184,6 +185,7 @@ class SaptResult:
         monomer_b_xyz: Optional[str] = None
         timestamp_utc: Optional[str] = None # ISO 8601 format string
         actual_basis_set: Optional[str] = None # Basis set finally used, after any escalation
+    dimer_name: Optional[str] = None      # Canonical name from the SaptTask
     """
 
     task_id: str

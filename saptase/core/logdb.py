@@ -182,6 +182,7 @@ class LogDb:
                         monomer_b_xyz TEXT,          -- Added for deduplication key
                         timestamp_utc TEXT,          -- Added for tie-breaking duplicates
                         actual_basis_set TEXT,       -- Basis set finally used, after escalation
+                        dimer_name TEXT,             -- Canonical dimer name
                         status TEXT NOT NULL,      -- e.g., COMPLETED, FAILED, RETRYING
                         error_message TEXT,    -- Null if success
                         error_code TEXT, -- Store the SaptError class name on failure
@@ -292,6 +293,7 @@ class LogDb:
         monomer_b_xyz = getattr(result, "monomer_b_xyz", None)
         timestamp_utc_result = getattr(result, "timestamp_utc", None)
         actual_basis_set = getattr(result, "actual_basis_set", None)
+        dimer_name = getattr(result, "dimer_name", None)  # Get the dimer_name
 
         try:
             self.cursor.execute(
@@ -299,10 +301,10 @@ class LogDb:
                 INSERT INTO task_log (
                     run_id, task_id, attempt_number, basis_set, method,
                     monomer_a_xyz, monomer_b_xyz, timestamp_utc,
-                    actual_basis_set, -- Added column
+                    actual_basis_set, dimer_name, -- Added dimer_name column
                     status, error_message, error_code, error_details, elapsed_time
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     run_id,
@@ -314,6 +316,7 @@ class LogDb:
                     monomer_b_xyz,
                     timestamp_utc_result,
                     actual_basis_set,  # Value for new column
+                    dimer_name,        # Value for dimer_name
                     status,
                     result.error_message if not result.success else None,
                     result.error_code if not result.success else None,
